@@ -1,0 +1,12 @@
+numpy==1.23.5
+dash
+dash-bootstrap-components
+dash-bio
+dash-bootstrap-templates
+pandas
+plotly
+flask
+nbformat
+nbconvert
+gunicorn
+

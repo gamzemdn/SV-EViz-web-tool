@@ -1,0 +1,18 @@
+# Ignore Python cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.swp
+
+# Ignore notebooks
+*.ipynb
+notebooks/
+
+# Ignore git & editor files
+.git
+*.sw?
+.DS_Store
+
+# Don't send local output data (mounted at runtime)
+uploaded_files/
