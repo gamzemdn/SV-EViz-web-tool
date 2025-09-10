@@ -18,21 +18,23 @@ def save_file(name, content):
         
         
 def prepare_vcf_files_for_merge(caller_paths, use_univar, ref_filename=None):
-    vcf_files = [os.path.abspath(p) for p in caller_paths]
-
-    univar_path = os.path.abspath(os.path.join(UPLOAD_DIRECTORY, "univar.vcf"))
-    ref_path = os.path.abspath(os.path.join(SURVIVOR_OUTPUT_DIR, ref_filename)) if ref_filename else None
-
-    if use_univar == 1 and os.path.exists(univar_path):
-        if univar_path not in vcf_files:
-            vcf_files.append(univar_path)
-
-    elif use_univar == 0 and ref_path and os.path.exists(ref_path):
-        # Only add if it's not the exact same file
-        if not any(os.path.samefile(ref_path, p) for p in vcf_files):
-            vcf_files.append(ref_path)
-
+    vcf_files = [os.path.abspath(p) for p in caller_paths if p]
+    vcf_files = list(dict.fromkeys(vcf_files))[:3]
     return vcf_files
+
+    #univar_path = os.path.abspath(os.path.join(UPLOAD_DIRECTORY, "univar.vcf"))
+   # ref_path = os.path.abspath(os.path.join(SURVIVOR_OUTPUT_DIR, ref_filename)) if ref_filename else None
+
+   # if use_univar == 1 and os.path.exists(univar_path):
+   #     if univar_path not in vcf_files:
+   #         vcf_files.append(univar_path)
+
+  #  elif use_univar == 0 and ref_path and os.path.exists(ref_path):
+        # Only add if it's not the exact same file
+   #     if not any(os.path.samefile(ref_path, p) for p in vcf_files):
+   #         vcf_files.append(ref_path)
+
+   # return vcf_files
 
 def parse_uploaded_files(contents, names, dates):
     saved_paths = []
@@ -41,11 +43,21 @@ def parse_uploaded_files(contents, names, dates):
     for content, name in zip(contents, names):
         content_type, content_string = content.split(',')
         decoded = base64.b64decode(content_string)
-        save_path = os.path.join(SURVIVOR_OUTPUT_DIR, name)
+
+        base = os.path.basename(name)
+        root, ext = os.path.splitext(base)
+        save_path = os.path.join(SURVIVOR_OUTPUT_DIR, base)
+
+        # Ensure unique filename
+        if os.path.exists(save_path):
+            stamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S_%f")
+            save_path = os.path.join(SURVIVOR_OUTPUT_DIR, f"{root}_{stamp}{ext}")
+
         with open(save_path, 'wb') as f:
             f.write(decoded)
+
         saved_paths.append(save_path)
-        messages.append(html.P(f"✅ Uploaded: {name}", style={}))
+        messages.append(html.P(f"✅ Uploaded: {os.path.basename(save_path)}", style={}))
 
     return html.Div(messages), saved_paths
 
@@ -61,21 +73,30 @@ def run_survivor_merge(params, vcf_files):
     merged_file_path = os.path.join(SURVIVOR_OUTPUT_DIR, merged_filename)
     sample_files_path = os.path.join(SURVIVOR_OUTPUT_DIR, "sample_files")
 
-    # Normalize all VCF paths
-    vcf_files = [os.path.abspath(p) for p in vcf_files]
+   # --- Normalize & keep last 3 unique (by most recent in list) ---
+ #   vcf_files = [os.path.abspath(p) for p in (vcf_files or [])]
+ #   unique_files = list(dict.fromkeys(reversed(vcf_files)))[::-1][-3:]
 
+    # --- Enforce minimum 2 distinct files ---
+#    if len(unique_files) < 2:
+#        msg = html.Div([
+ #           "❌ Error: At least two caller VCF files are required.",
+ #           html.Br(),
+  #          html.Div("Current files:"),
+#            html.Ul([html.Li(os.path.basename(p)) for p in unique_files]) if unique_files else html.Div("— none —")
+  #      ])
+ #       return msg, None
+
+            
     # Ensure minimum input requirement
-    if len(vcf_files) < 2:
-        return "❌ Error: At least two VCF files are required to merge.", None
+ #   if len(vcf_files) < 2:
+  #      return "❌ Error: At least two VCF files are required to merge.", None
 
     # Write file paths to sample list
     try:
-        unique_files = list(dict.fromkeys(vcf_files))  # Removes duplicates while preserving order
-        if len(unique_files) > 2:
-            unique_files = unique_files[-2:]  # Keep only the last two
-
+       
         with open(sample_files_path, "w") as sf:
-            for vcf in unique_files:
+            for vcf in vcf_files[:3]:
                 sf.write(vcf + "\n")
     except Exception as e:
         return f"❌ Failed to write sample file list: {str(e)}", None
@@ -99,7 +120,17 @@ def run_survivor_merge(params, vcf_files):
         str(params['min_sv_size']),
         merged_file_path
     ]
-
+    try:
+        warning_msg = None
+        if len(vcf_files) > 3:
+            warning_msg = html.Div(f"⚠️ Only the first 3 of {len(vcf_files)} uploaded files will be merged.")
+    
+        with open(sample_files_path, "w") as sf:
+            for vcf in vcf_files[:3]:
+                sf.write(vcf + "\n")
+    except Exception as e:
+        return f"❌ Failed to write sample file list: {str(e)}", None
+    
     # Run SURVIVOR
     try:
         subprocess.run(command, check=True, capture_output=True, text=True)
@@ -113,7 +144,9 @@ def run_survivor_merge(params, vcf_files):
             html.Div(f"Output saved to: {merged_file_path}"),
             html.Br(),
             html.Div("🗂️ Files merged:"),
-            html.Ul([html.Li(file) for file in file_lines])
+            html.Ul([html.Li(os.path.basename(file)) for file in vcf_files[:3]]),
+            html.Br(),
+            warning_msg if warning_msg else ""
         ])
 
         return status_div, merged_file_path

@@ -10,7 +10,7 @@ def get_survivor_layout():
 
     shared_label_style = {
         'fontFamily': '"Times New Roman", Times, serif',
-        'width': '400px',
+        'width': '250px',
         'display': 'inline-block'
     }
 
@@ -20,17 +20,17 @@ def get_survivor_layout():
 
     return html.Div([
      #   html.H3("SURVIVOR", style={'padding': '1rem', 'fontSize': '24px', 'fontFamily': '"Times New Roman", Times, serif', 'fontWeight': 'bold'}),
-        html.H3("Upload Caller VCF File", style={'marginTop': '20px', 'fontFamily': '"Times New Roman", Times, serif', 'fontSize': '20px','whiteSpace': 'nowrap'}),
+        html.H3("Upload Caller VCF Files (min. 2, max. 3)", style={'marginTop': '20px', 'fontFamily': '"Times New Roman", Times, serif', 'fontSize': '20px','whiteSpace': 'nowrap'}),
         # Upload caller area
         dcc.Upload(
             id='survivor-upload',
-            children=html.Div(['📎 Drag and Drop or Select File']),
+            children=html.Div(['📎 Drag and Drop or Select Files']),
             style={
-                'width': '400px', 'height': '60px', 'lineHeight': '60px',
+                'width': '100%', 'height': '60px', 'lineHeight': '60px',
                 'borderWidth': '1px', 'borderStyle': 'dashed', 'borderRadius': '5px',
                 'textAlign': 'center', 'margin': '10px', 'fontFamily': '"Times New Roman", Times, serif'
             },
-            multiple=False
+            multiple=True
         ),
         
         html.Div([
@@ -46,18 +46,18 @@ def get_survivor_layout():
                 inline=True,
                 labelStyle={'marginLeft': '10px', 'fontFamily': '"Times New Roman", Times, serif'}
             )
-        ], style={'marginBottom': '10px'}),
+        ], style={'marginBottom': '10px','display': 'none'}),
         html.Div(
             id='ref-upload-section',
             children=[
-                html.H3("Upload Reference VCF File", style={'marginTop': '0px', 'fontFamily': '"Times New Roman", Times, serif', 'fontSize': '20px','whiteSpace': 'nowrap'}),
+                html.H3("Upload Reference VCF File", style={'marginTop': '0px', 'fontFamily': '"Times New Roman", Times, serif', 'fontSize': '20px','whiteSpace': 'nowrap','display': 'none'}),
                 dcc.Upload(
                     id='survivor-upload-ref',
                     children=html.Div(['📎 Drag and Drop or Select File']),
                     style={
                         'width': '400px', 'height': '60px', 'lineHeight': '60px',
                         'borderWidth': '1px', 'borderStyle': 'dashed', 'borderRadius': '5px',
-                        'textAlign': 'center', 'margin': '10px', 'fontFamily': '"Times New Roman", Times, serif'
+                        'textAlign': 'center', 'margin': '10px', 'fontFamily': '"Times New Roman", Times, serif','display': 'none'
                     },
                     multiple=False
                 )
@@ -72,6 +72,11 @@ def get_survivor_layout():
             html.Div([
                 html.Label('Maximum allowed distance (bp):', style=shared_label_style),
                 dcc.Input(id='param_dist', type='number', min=0, placeholder='default: 1000', style=shared_input_style)
+            ], style=shared_row_style),
+            
+             html.Div([
+                html.Label('Minimum SV size (bp):', style=shared_label_style),
+                dcc.Input(id='param_sv_size', type='number', min=0, placeholder='default: 30', style=shared_input_style)
             ], style=shared_row_style),
 
             html.Div([
@@ -97,7 +102,7 @@ def get_survivor_layout():
                     options=[{'label': 'Yes', 'value': '1'}, {'label': 'No', 'value': '0'}],
                     value='1',
                     inline=True,
-                    labelStyle={'display': 'inline-block',  'fontFamily': '"Times New Roman", Times, serif'}
+                    labelStyle={'display': 'inline-block',  'margin-right': '10px','fontFamily': '"Times New Roman", Times, serif'}
                 )
             ], style=shared_row_style),
 
@@ -108,7 +113,7 @@ def get_survivor_layout():
                     options=[{'label': 'Yes', 'value': '1'}, {'label': 'No', 'value': '0'}],
                     value='1',
                     inline=True,
-                    labelStyle={'display': 'inline-block',  'fontFamily': '"Times New Roman", Times, serif'}
+                    labelStyle={'display': 'inline-block', 'margin-right': '10px', 'fontFamily': '"Times New Roman", Times, serif'}
                 )
             ], style=shared_row_style),
 
@@ -119,16 +124,13 @@ def get_survivor_layout():
                     options=[{'label': 'Yes', 'value': '1'}, {'label': 'No', 'value': '0'}],
                     value='0',
                     inline=True,
-                    labelStyle={'display': 'inline-block',  'fontFamily': '"Times New Roman", Times, serif'}
+                    labelStyle={'display': 'inline-block',  'margin-right': '10px','fontFamily': '"Times New Roman", Times, serif'}
                 )
             ], style=shared_row_style),
 
-            html.Div([
-                html.Label('Minimum SV size (bp):', style=shared_label_style),
-                dcc.Input(id='param_sv_size', type='number', min=0, placeholder='default: 30', style=shared_input_style)
-            ], style=shared_row_style),
+     
 
-            dbc.Button('Merge Files', id='merge-button', n_clicks=0, color="primary", className="mt-2", style={'marginTop': '15px', 'fontFamily': '"Times New Roman", Times, serif'}),
+            dbc.Button('Run SURVIVOR merge', id='merge-button', n_clicks=0, color="primary", className="mt-2", style={'marginTop': '15px', 'fontFamily': '"Times New Roman", Times, serif'}),
         ], style={'margin': '10px'})
  #,
        # html.Div(id='comparison-extra-output', style={'marginTop': '20px'})

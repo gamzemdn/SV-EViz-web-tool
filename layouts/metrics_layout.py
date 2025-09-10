@@ -4,12 +4,12 @@ import dash_bootstrap_components as dbc
 
 def get_metrics_layout():
     return html.Div([
-        html.Div(id='output-metrics'),  # For SURVIVOR results
+        html.Div(id='output-metrics'),  # For Truvari results
         html.Div(id='summary-visualization-output')  # For EvalSVCallers results
     ])
 
 '''
-def get_metrics_layout():
+def get_metricsss_layout():
     return html.Div([
         # --- SURVIVOR Upload Section ---
         html.Div(id='survivor-upload-section', children=[

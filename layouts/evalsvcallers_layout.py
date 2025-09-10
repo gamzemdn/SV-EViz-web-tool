@@ -30,7 +30,7 @@ def get_evalsvcallers_layout():
             id='eval-upload',
             children=html.Div(['📎 Drag and Drop or Select File']),
             style={
-                'width': '400px', 'height': '60px', 'lineHeight': '60px',
+                'width': '100%', 'height': '60px', 'lineHeight': '60px',
                 'borderWidth': '1px', 'borderStyle': 'dashed', 'borderRadius': '5px',
                 'textAlign': 'center', 'margin': '0px', 'fontFamily': '"Times New Roman", Times, serif'
             },
@@ -40,7 +40,7 @@ def get_evalsvcallers_layout():
         #html.Div(id='uploaded-files-list', style={'marginTop': '20px'}),
     #    html.Br(),
     
-        html.H3("Select Caller Tool for Conversion", style={'fontFamily': '"Times New Roman", Times, serif', 'fontSize': '20px','whiteSpace': 'nowrap'}),
+        html.H3("Select Caller Tool for Conversion", style={'marginTop': '20px','fontFamily': '"Times New Roman", Times, serif', 'fontSize': '20px','whiteSpace': 'nowrap'}),
     
         dcc.Dropdown(
             id='caller_tool',
@@ -55,7 +55,7 @@ def get_evalsvcallers_layout():
                 "VirusFinder2", "Wham"
             ]],
             placeholder="Select a caller tool",
-            style={'fontFamily': '"Times New Roman", Times, serif', 'width': '400px'}
+            style={'fontFamily': '"Times New Roman", Times, serif', 'width': '100%'}
         ),
     
         dbc.Button(
@@ -107,7 +107,25 @@ def get_evalsvcallers_layout():
         inline=True,
         labelStyle={'display': 'block', 'fontFamily': '"Times New Roman", Times, serif'}
     ),
-    html.Div(id="reference_upload_section", style={"marginTop": "10px"}),
+
+
+    html.Div(id='reference_upload_section', children=[
+
+        dcc.Upload(
+            id='dynamic-upload',
+            children=html.Div(['📎 Drag and Drop or Select File']),
+            style={
+                'width': '100%', 'height': '60px', 'lineHeight': '60px',
+                'borderWidth': '1px', 'borderStyle': 'dashed', 'borderRadius': '5px',
+                'textAlign': 'center', 'margin': '10px', 'fontFamily': '"Times New Roman", Times, serif'
+            },
+            multiple=False
+        )
+    ], style={'width': '100%'}),
+
+
+        
+ #   html.Div(id="reference_upload_section", style={"marginTop": "10px"}),
     html.Br(),
 
     # Parameter mode toggle

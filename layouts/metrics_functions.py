@@ -5,11 +5,42 @@ import pandas as pd
 import plotly.express as px
 from collections import defaultdict
 from dash import html, dcc
+import json
+from dash import dash_table
+import numpy as np
 import dash_bootstrap_components as dbc
 UPLOAD_DIRECTORY = "./uploaded_files/"
 METRIC_OUTPUT_DIR = os.path.join(UPLOAD_DIRECTORY, "metrics_output")
 os.makedirs(UPLOAD_DIRECTORY, exist_ok=True)
 os.makedirs(METRIC_OUTPUT_DIR, exist_ok=True)
+svtypes = ['DEL', 'DUP', 'INS', 'INV', 'BND', 'CNV']  # or whatever types you have
+base_colors = px.colors.qualitative.Vivid.copy()  # or px.colors.qualitative.Bold
+# Optionally remove yellowish tone (like '#FECB52')
+exclude_colors = ['rgb(218, 165, 27)']  # Plotly yellow
+color_palette = [c for c in base_colors if c not in exclude_colors]
+svtype_color_map = {
+    sv: color_palette[i % len(color_palette)] for i, sv in enumerate(svtypes)
+}
+
+
+
+#size_classes = ["A", "SS", "S", "M", "L"]
+#size_color_discrete_map = {
+#    size_class: color_palette[i % len(color_palette)]
+#    for i, size_class in enumerate(size_classes)
+#}
+#tsml_order      = ["Total", "tiny (<= 100 bp)", "short (<= 1.0 kp)", "middle (<= 100 kb)", "large (> 100 kb)"]  # bar plot
+
+#size_color_discrete_map = {size_classes[i]: color_palette[i] for i in range(len(size_classes))}
+#tsml_color_discrete_map = {tsml_order[i]: color_palette[i] for i in range(len(tsml_order))}
+
+
+metric_classes = ["Precision", "Recall", "F1-Score"]
+metric_color_map = {
+    metric_class: color_palette[i % len(color_palette)]
+    for i, metric_class in enumerate(metric_classes)
+}
+
 # --- Decode uploaded content ---
 def parse_contents(contents):
     content_type, content_string = contents.split(',')
@@ -184,6 +215,34 @@ def get_survivor_upload_section():
         dbc.Button('Process and Calculate Metrics', id='process-button', n_clicks=0, color="primary", className="mt-2", style={'marginTop': '20px', 'fontFamily': '"Times New Roman", Times, serif'})
     ])
 
+
+def get_truvari_upload_section():
+    return html.Div([
+        html.Label("Upload Truvari Summary Output File:", style={'fontFamily': '"Times New Roman", Times, serif'}),
+        dcc.Upload(
+            id='upload-tru-file',
+            children=html.Div(['📎 Drag and Drop or ', html.A('Select *summary File')]),
+            style={
+                'width': '100%',
+                'height': '60px',
+                'lineHeight': '60px',
+                'borderWidth': '1px',
+                'borderStyle': 'dashed',
+                'borderRadius': '5px',
+                'textAlign': 'center',
+                'margin': '10px',
+                'fontFamily': '"Times New Roman", Times, serif'
+            },
+            multiple=False
+        ),
+        html.Div(id='upload-tru-txt-status', style={'marginLeft': '10px', 'fontFamily': '"Times New Roman", Times, serif'}),
+        dbc.Button('Process Truvari File', id='process-tru-button', n_clicks=0, color="primary", className="mt-2", style={'marginTop': '10px', 'fontFamily': '"Times New Roman", Times, serif'})
+    ])
+
+
+
+
+
 def get_evalsvcallers_upload_section():
     return html.Div([
         html.Label("Upload EvalSVCallers .eval.txt Output File:", style={'fontFamily': '"Times New Roman", Times, serif'}),
@@ -191,7 +250,7 @@ def get_evalsvcallers_upload_section():
             id='upload-eval-file',
             children=html.Div(['📎 Drag and Drop or ', html.A('Select *.eval.txt File')]),
             style={
-                'width': '400px',
+                'width': '100%',
                 'height': '60px',
                 'lineHeight': '60px',
                 'borderWidth': '1px',
@@ -209,6 +268,165 @@ def get_evalsvcallers_upload_section():
 
 READ_COUNTS = ["2", "3", "4", "5", "6", "7", "8", "9", "10", "12"]
 
+
+
+def parse_truvari_file(contents):
+    """
+    Accepts a Dash upload 'contents' string for a Truvari summary file
+    (JSON-formatted text, regardless of .txt or .json extension).
+    Returns a DataFrame in LONG form with columns: ['Metric', 'Value'].
+    """
+    content_type, content_string = contents.split(',', 1)
+    decoded = base64.b64decode(content_string).decode('utf-8', errors='replace').strip()
+
+    # Robust JSON load (handles txt/json the same)
+    data = json.loads(decoded)  # will raise if not valid JSON
+
+    # Convert to long form table for easy plotting
+    df_long = pd.DataFrame(list(data.items()), columns=["Metric", "Value"])
+    return df_long
+
+def generate_truvari_visuals(df):
+    """
+    Generates:
+      1) Summary table
+      2) Metric bar: precision, recall, f1 (+ gt_concordance çizgisi)
+      3) Count bar: FP, FN, base count, comp count
+      4) TP breakdown: TP-base, TP-comp, TP-comp_TP-gt, TP-comp_FP-gt, TP-base_TP-gt, TP-base_FP-gt
+    """
+    import numpy as np
+    import pandas as pd
+    import plotly.express as px
+    from dash import html, dcc
+    import dash_table
+
+    # Nested yapıları at
+    df = df[~df["Value"].apply(lambda x: isinstance(x, (dict, list)) or x is None)].copy()
+
+    # Long forma normalize et
+    if {"Metric", "Value"}.issubset(df.columns):
+        df_long = df.copy()
+    else:
+        df_long = df.T.reset_index()
+        df_long.columns = ["Metric", "Value"]
+
+    # ✅ İSİM NORMALİZASYONU (JSON farklarını gider)
+    # - call/comp farkları
+    # - TP-call -> TP-comp eşlemesi
+    replace_map = {
+        "base cnt": "base count",
+        "call cnt": "comp count",
+        "comp cnt": "comp count",
+        "TP-call": "TP-comp",
+        "TP-call_TP-gt": "TP-comp_TP-gt",
+        "TP-call_FP-gt": "TP-comp_FP-gt",
+    }
+    df_long["Metric"] = df_long["Metric"].replace(replace_map)
+
+    # Wide tablo üretmek için sözlük
+    wide = pd.DataFrame([dict(df_long.values)])
+
+    # Sayısallaştır
+    df_long["Value"] = pd.to_numeric(df_long["Value"], errors="coerce")
+
+    # === Summary Table ===
+    rate_keys = {"precision", "recall", "f1", "gt_concordance"}
+    table_row = {}
+    for col, val in wide.iloc[0].items():
+        if col in rate_keys and pd.notna(val):
+            table_row[col] = f"{float(val):.4f}"
+        else:
+            if pd.notna(val) and (isinstance(val, (int, np.integer)) or (isinstance(val, float) and float(val).is_integer())):
+                table_row[col] = int(val)
+            else:
+                table_row[col] = val
+
+    table_df = pd.DataFrame([table_row])
+    table = dash_table.DataTable(
+        data=table_df.to_dict("records"),
+        columns=[{"name": c, "id": c} for c in table_df.columns],
+        style_table={'overflowX': 'auto'},
+        style_cell={'textAlign': 'center', 'fontFamily': '"Times New Roman", Times, serif'},
+        style_header={'backgroundColor': 'lightgrey', 'fontWeight': 'bold'},
+        page_size=15
+    )
+
+    # === Figure 1: precision, recall, f1 (+ gt_concordance çizgisi) ===
+    fig1_keys = ["precision", "recall", "f1"]
+    fig1_df = df_long[df_long["Metric"].isin(fig1_keys)].copy()
+    fig1_df["Value_fmt"] = fig1_df["Value"].map(lambda v: f"{v:.4f}" if pd.notna(v) else "")
+
+    gt_concordance_val = df_long.loc[df_long["Metric"].eq("gt_concordance"), "Value"]
+    gt_concordance_val = float(gt_concordance_val.iloc[0]) if len(gt_concordance_val) else None
+
+    fig1 = px.bar(
+        fig1_df, x="Metric", y="Value", text="Value_fmt",
+        title="Truvari Performance Metrics (precision/recall/f1) + GT Concordance",
+        color="Metric", color_discrete_sequence=px.colors.qualitative.Pastel,
+        range_y=[0, 1]
+    )
+    fig1.update_traces(textposition='outside')
+
+    if gt_concordance_val is not None:
+        fig1.add_shape(
+            type="line",
+            x0=-0.5, x1=2.5, y0=gt_concordance_val, y1=gt_concordance_val,
+            line=dict(color="black", width=2, dash="dash"),
+            name="GT Concordance"
+        )
+        fig1.add_annotation(
+            x=1.5, y=gt_concordance_val,
+            text=f"GT Concordance = {gt_concordance_val:.4f}",
+            showarrow=False, yshift=10,
+            font=dict(size=12, family="Times New Roman")
+        )
+    fig1.update_layout(height=420, margin=dict(l=20, r=20, t=60, b=40))
+
+    # === Figure 2: Sayımlar — FP, FN, base count, comp count ===
+    wanted_order = ["FP", "FN", "base count", "comp count", "call count"]  # call count varsa da göster (eski veri için)
+    present = [k for k in wanted_order if k in set(df_long["Metric"])]
+    fig2_df = df_long[df_long["Metric"].isin(present)].copy()
+    fig2_df["Value_fmt"] = fig2_df["Value"].map(lambda v: f"{v:.0f}" if pd.notna(v) else "")
+    fig2_df["Metric"] = pd.Categorical(fig2_df["Metric"], categories=present, ordered=True)
+    fig2_df = fig2_df.sort_values("Metric")
+
+    fig2 = px.bar(
+        fig2_df, x="Metric", y="Value", text="Value_fmt",
+        title="Callset & Error Counts",
+        color="Metric", color_discrete_sequence=px.colors.qualitative.Vivid
+    )
+    fig2.update_traces(textposition='outside')
+    fig2.update_layout(height=420, margin=dict(l=20, r=20, t=60, b=40))
+
+    # === Figure 3: TP ayrımı — base/comp ve GT breakdown ===
+    fig3_keys_ordered = [
+        "TP-base", "TP-comp",
+        "TP-base_TP-gt", "TP-comp_TP-gt",
+        "TP-base_FP-gt", "TP-comp_FP-gt"
+    ]
+    fig3_df = df_long[df_long["Metric"].isin(fig3_keys_ordered)].copy()
+    fig3_df["Metric"] = pd.Categorical(fig3_df["Metric"], categories=fig3_keys_ordered, ordered=True)
+    fig3_df = fig3_df.sort_values("Metric")
+    fig3_df["Value_fmt"] = fig3_df["Value"].map(lambda v: f"{v:.0f}" if pd.notna(v) else "")
+
+    fig3 = px.bar(
+        fig3_df, x="Metric", y="Value", text="Value_fmt",
+        title="True Positive Breakdown (base/comp + GT)",
+        color="Metric", color_discrete_sequence=px.colors.qualitative.Set2
+    )
+    fig3.update_traces(textposition='outside')
+    fig3.update_layout(height=420, margin=dict(l=20, r=20, t=60, b=40))
+
+    # === Final Output ===
+    return html.Div([
+        html.H4("Truvari Summary Metrics", style={'marginTop': '0px'}),
+        table,
+        html.Br(),
+        dcc.Graph(figure=fig1),
+        dcc.Graph(figure=fig2),
+        dcc.Graph(figure=fig3)
+    ])
+    
 def parse_evalsvcallers_file(contents):
     content_type, content_string = contents.split(',')
     decoded = base64.b64decode(content_string)
@@ -324,6 +542,7 @@ def generate_evalsvcallers_visuals(pivot_ref, df_long, df_block):
     import dash_table
     import plotly.express as px
     from dash import html, dcc
+    
 
     # Define metric order for main plot (excluding 'Call')
     metric_order = ["Recall", "Precis", "F1-Score"]
@@ -338,19 +557,56 @@ def generate_evalsvcallers_visuals(pivot_ref, df_long, df_block):
     df_long_main = df_long[df_long["Metric"] != "Call"]
     df_long_call = df_long[df_long["Metric"] == "Call"]
 
-    # === Reference stacked bar plot ===
-    bar_fig = px.bar(
-        pivot_ref.melt(id_vars=["Ref Variant", "Total"], var_name="Size Category", value_name="Count"),
-        x="Ref Variant", y="Count", color="Size Category", barmode="stack",
-        title="Reference Variant Distribution"
+
+     # ✅ Fix newline and typo in column names
+    pivot_ref.columns = (
+        pivot_ref.columns
+        .str.replace("\n", " ", regex=False)
+        .str.strip()
+        .str.replace("(<=1.0", "(<= 1.0", regex=False)  # ensure space after <=
     )
 
+    pivot_ref = pivot_ref.rename(columns={"tinny (<= 100 bp)": "tiny (<= 100 bp)"})
+
+    # Melt after renaming
+    df_melted = pivot_ref.melt(
+        id_vars=["Ref Variant"],
+        var_name="Size Category",
+        value_name="Count"
+    )
+
+    static_colors = {
+        "A": "rgb(204, 97, 176)",           # orange
+        "SS": "rgb(82, 188, 163)",         # blue
+        "S": "rgb(47, 138, 196)",          # teal
+        "M": "rgb(237, 100, 90)",          # green
+        "L": "rgb(93, 105, 177)",          # pink
+    
+        "Total": "rgb(204, 97, 176)",       # matches A
+        "tiny (<= 100 bp)": "rgb(82, 188, 163)",  # matches SS
+        "short (<= 1.0 kp)": "rgb(47, 138, 196)", # matches S
+        "middle (<= 100 kb)": "rgb(237, 100, 90)",# matches M
+        "large (> 100 kb)": "rgb(93, 105, 177)"   # matches L
+    }
+    
+    # Use in plots:
+    size_color_discrete_map = {k: static_colors[k] for k in ["A", "SS", "S", "M", "L"]}
+    tsml_color_discrete_map = {k: static_colors[k] for k in ["Total", "tiny (<= 100 bp)", "short (<= 1.0 kp)", "middle (<= 100 kb)", "large (> 100 kb)"]}
+    
+    
+    # === Reference stacked bar plot ===
+    bar_fig = px.bar(
+        df_melted,
+        x="Ref Variant", y="Count", color="Size Category", color_discrete_map=tsml_color_discrete_map, barmode="stack",
+        title="Reference Variant Distribution"
+    )
     # === Line plot for main metrics ===
     line_fig_main = px.line(
         df_long_main,
         x="Read Count",
         y="Value",
         color="SizeClass",             # now coloring by SizeClass
+        color_discrete_map=size_color_discrete_map, 
         line_dash="SizeClass",         # still keep line style
         facet_row="SVTYPE",            # separate by SV type (DEL, DUP, INS)
         facet_col="Metric",            # separate by metric (Precision, Recall, F1)
@@ -359,10 +615,10 @@ def generate_evalsvcallers_visuals(pivot_ref, df_long, df_block):
         category_orders={
             "SizeClass": ["A", "SS", "S", "M", "L"],
             "Metric": ["Precis","Recall","F1-Score"]
-        },
-        color_discrete_map={
-            "A": "#1f77b4", "SS": "#ff7f0e", "S": "#2ca02c", "M": "#d62728", "L": "#9467bd"
         }
+      #  color_discrete_map={
+      #      "A": "#1f77b4", "SS": "#ff7f0e", "S": "#2ca02c", "M": "#d62728", "L": "#9467bd"
+      #  }
     )
 
     #line_fig_main.update_traces(marker=dict(size=8))  # make markers larger
@@ -370,12 +626,13 @@ def generate_evalsvcallers_visuals(pivot_ref, df_long, df_block):
     line_fig_main.update_yaxes(range=[0, 1])
     # === Separate line plot for 'Call' ===
     line_fig_call = px.line(
-        df_long_call, x="Read Count", y="Value",color="SizeClass", 
+        df_long_call, x="Read Count", y="Value",color="SizeClass", color_discrete_map=size_color_discrete_map, 
         line_dash="SizeClass",  facet_row="SVTYPE",
         markers=True, title="Variant Count (Call) by SV Type and Size Class"
     )
     line_fig_call.update_layout(height=800)
-
+    # Correct the column name typo
+    
     # === Return all visuals ===
     return html.Div([
         html.H4("Reference Summary Table", style={'marginTop': '0px', 'fontFamily': '"Times New Roman", Times, serif', 'fontSize': '20px', 'fontWeight': 'bold'}),
@@ -463,7 +720,8 @@ def generate_survivor_visuals(metrics_df):
                                 var_name='Metric', value_name='Score'),
                 x='SVTYPE',
                 y='Score',
-                color='Metric',
+                color='Metric', 
+                color_discrete_map=metric_color_map, 
                 barmode='group',
                 title='Precision, Recall, and F1 Score per SVTYPE',
                 height=500

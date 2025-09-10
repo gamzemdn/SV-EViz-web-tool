@@ -17,6 +17,14 @@ from dash_bio import Clustergram
 UPLOAD_DIRECTORY = "./uploaded_files/"
 VISUALIZATION_OUTPUT_DIR = os.path.join(UPLOAD_DIRECTORY, "visualization_output")
 os.makedirs(VISUALIZATION_OUTPUT_DIR, exist_ok=True)
+svtypes = ['DEL', 'DUP', 'INS', 'INV', 'BND', 'CNV']  # or whatever types you have
+base_colors = px.colors.qualitative.Vivid.copy()  # or px.colors.qualitative.Bold
+# Optionally remove yellowish tone (like '#FECB52')
+exclude_colors = ['rgb(218, 165, 27)']  # Plotly yellow
+color_palette = [c for c in base_colors if c not in exclude_colors]
+svtype_color_map = {
+    sv: color_palette[i % len(color_palette)] for i, sv in enumerate(svtypes)
+}
 
 # --- Genome length dictionaries ---
 hg19_lengths = {
@@ -139,7 +147,7 @@ def plot_vcf_data(df):
             sv_counts = df["SVTYPE"].value_counts().reset_index()
             sv_counts.columns = ["Variant Type", "Count"]
             fig_svtype = px.bar(
-                sv_counts, x="Variant Type", y="Count", color="Variant Type",
+                sv_counts, x="Variant Type", y="Count", color="Variant Type", color_discrete_map=svtype_color_map,
                 title="Variant Type Distribution"
             )
             figures.append(dcc.Graph(figure=fig_svtype))
@@ -183,7 +191,7 @@ def plot_vcf_data(df):
 
             if not violin_df.empty:
                 fig_violin = px.violin(
-                    violin_df, x="SVTYPE", y="logSVLEN", color="SVTYPE", box=True, points="all",
+                    violin_df, x="SVTYPE", y="logSVLEN", color="SVTYPE", color_discrete_map=svtype_color_map, box=True, points="all",
                     title="Log-transformed SV Length by Variant Type",
                     labels={"logSVLEN": "log10(SVLEN + 1)"}
                 )
@@ -309,7 +317,7 @@ def vcf_to_circos_json(vcf_file_path, output_json_path, source_type, bin_size=10
             if end != pos:
                 source = {"id": chrom, "start": pos, "end": end}
                 target = {"id": chrom, "start": end, "end": end + 1}
-                color = svtype_colors.get(svtype, "#95a5a6")
+                color = svtype_color_map.get(svtype, "#95a5a6")
 
                 raw_chords.append({
                     "source": source,
@@ -354,7 +362,7 @@ def vcf_to_circos_json(vcf_file_path, output_json_path, source_type, bin_size=10
                 "type": "histogram",
                 "data": data,
                 "name": svtype,
-                "color": svtype_colors.get(svtype, "#95a5a6"),
+                "color": svtype_color_map.get(svtype, "#95a5a6"),
                 "height": 0.08
             })
 
@@ -388,26 +396,52 @@ def plot_sankey(df):
     sources = chrom_svtype_counts["CHROM"].map(label_to_idx)
     targets = chrom_svtype_counts["SVTYPE"].map(label_to_idx)
     values = chrom_svtype_counts["count"]
-
+    
+    node_colors = (
+        ['#DC143C'] * len(chrom_order_sorted) +  # chromosomes (default light blue)
+        [svtype_color_map.get(sv, '#999999') for sv in svtypes_sorted]  # svtypes
+    )
+    # 🎨 Define link colors based on target SVTYPE
+    target_colors = chrom_svtype_counts["SVTYPE"].map(
+        lambda sv: svtype_color_map.get(sv, 'rgba(160,160,160,0.4)')
+    )
+    link_colors = target_colors.apply(lambda c: c.replace("rgb(", "rgba(").replace(")", ",0.5)") if c.startswith("rgb(") else c)
+    
     fig = go.Figure(go.Sankey(
         node=dict(
             pad=15,
             thickness=20,
             line=dict(color="black", width=0.5),
             label=labels,
-            color=['rgba(55,128,191,0.6)'] * len(chrom_order_sorted) +
-                  ['rgba(219,64,82,0.6)'] * len(svtypes_sorted)
+            color=node_colors
         ),
         link=dict(
             source=sources,
             target=targets,
             value=values,
-            color=['rgba(100,100,100,0.36)'] * len(values)
+            color=link_colors
         )
     ))
     fig.update_layout(title_text="Chromosome to SVTYPE Sankey Plot", font_size=14)
+    legend = html.Div([
+            html.Div([
+                html.Span(style={
+                    'backgroundColor': svtype_color_map.get(sv, '#999'),
+                    'display': 'inline-block',
+                    'width': '15px',
+                    'height': '15px',
+                    'marginRight': '5px',
+                    'borderRadius': '3px'
+                }),
+                html.Span(f"{sv}", style={'marginRight': '15px', 'fontSize': '14px'})
+            ], style={'display': 'inline-block'}) for sv in svtypes_sorted
+        ], style={'padding': '10px 0', 'textAlign': 'left'})
 
-    return dcc.Graph(figure=fig, style={"height": "700px", "width": "100%"})
+
+    return html.Div([
+        legend,
+        dcc.Graph(figure=fig, style={"height": "700px", "width": "100%"})
+    ])
 def plot_clustergram(df, selected_chroms=None):
     # ✅ Always re-extract SVTYPE from INFO
     df["SVTYPE"] = df["INFO"].str.extract(r"SVTYPE=([^;]+)")
@@ -443,18 +477,33 @@ def plot_clustergram(df, selected_chroms=None):
     if pivot_df.shape[0] < 2 or pivot_df.shape[1] < 2:
         return html.Div("⚠️ Not enough informative data to generate Clustergram.")
 
-    # ✅ Safe clustergram
-    try:
-        return dcc.Graph(figure=Clustergram(
-            data=pivot_df.values,
-            row_labels=pivot_df.index.tolist(),
-            column_labels=pivot_df.columns.tolist(),
-            color_threshold={'row': 250, 'col': 700},
-            height=800,
-            width=700
-        ))
-    except Exception as e:
-        return html.Div(f"❌ Clustergram render error: {e}")
+    # 1) Figure'ı üret
+    fig = Clustergram(
+        data=pivot_df.values,
+        row_labels=pivot_df.index.tolist(),
+        column_labels=pivot_df.columns.tolist(),
+        color_map="RdBu",
+        color_threshold={'row': 250, 'col': 700},
+        height=800,
+        width=900,
+        display_ratio=[0.85, 0.15],
+        # hidden_labels=[]  # gerekirse aç
+    )
+    
+    # 2) Tüm x/y eksenlerinde tick label’ları AÇ
+    layout_dict = fig.layout.to_plotly_json()
+    
+    axis_updates = {}
+    for key in layout_dict.keys():
+        if str(key).startswith("xaxis") or str(key).startswith("yaxis"):
+            axis_updates[key] = dict(showticklabels=True)
+    
+    fig.update_layout(
+        **axis_updates,
+        margin=dict(l=110, r=60, t=50, b=110)  # etiketler için alan
+    )
+    
+    return dcc.Graph(figure=fig)
 
 
 def plot_manhattan(df, selected_svtypes, threshold):
@@ -497,7 +546,7 @@ def plot_manhattan(df, selected_svtypes, threshold):
                 y=-np.log10(sv_df["P"]),
                 mode='markers',
                 name=f"chr{chrom}-{svtype}",
-                marker=dict(size=4),
+                marker=dict(color=svtype_color_map.get(svtype, "#999999"),size=4),
                 customdata=sv_df[["CHROM", "POS", "SVTYPE", "SVLEN", "QUAL"]],
                 hovertemplate=(
                     "CHROM: %{customdata[0]}<br>"
@@ -540,6 +589,25 @@ def plot_manhattan(df, selected_svtypes, threshold):
             height=600,
             margin=dict(t=50, l=60, r=30, b=60)
         )
+
+    # === SVTYPE Legend ===
+    svtypes = df["SVTYPE"].unique().tolist()
+    legend = html.Div([
+        html.Div([
+            html.Span(style={
+                'backgroundColor': svtype_color_map.get(sv, '#999999'),
+                'display': 'inline-block',
+                'width': '15px',
+                'height': '15px',
+                'marginRight': '5px',
+                'borderRadius': '3px'
+            }),
+            html.Span(f"{sv}", style={'marginRight': '15px', 'fontSize': '14px'})
+        ], style={'display': 'inline-block'}) for sv in svtypes
+    ], style={'padding': '10px 0', 'textAlign': 'left'})
+
+
+    
     return html.Div([
         html.Div(
             "⚠️ If plot is empty, check QUAL column.",
@@ -551,7 +619,7 @@ def plot_manhattan(df, selected_svtypes, threshold):
                 'marginBottom': '20px'
             }
         ),
-        
+        legend,
         dcc.Graph(figure=fig)
 
     ])
@@ -639,13 +707,30 @@ def plot_manhattan_svlen(df, selected_svtypes, threshold):
 
     return dcc.Graph(figure=fig)
 
-def plot_circos(graph_type, selected_svtypes, circos_data, svtype_colors):
+def plot_circos(graph_type, selected_svtypes, circos_data, svtype_color_map):
     if not circos_data:
         return html.Div("No Circos data available.")
 
-    tracks = update_tracks(graph_type, selected_svtypes, circos_data, svtype_colors)
+    tracks = update_tracks(graph_type, selected_svtypes, circos_data, svtype_color_map)
+ # 🔶 Create a color legend based on selected SVTYPEs
+    legend = html.Div([
+        html.Div([
+            html.Span(style={
+                'backgroundColor': svtype_color_map.get(sv, '#999'),
+                'display': 'inline-block',
+                'width': '15px',
+                'height': '15px',
+                'marginRight': '5px',
+                'borderRadius': '3px'
+            }),
+            html.Span(f"{sv}", style={'marginRight': '15px', 'fontSize': '14px'})
+        ], style={'display': 'inline-block'}) for sv in selected_svtypes
+    ], style={'padding': '10px 0', 'textAlign': 'left'})
 
-    return dashbio.Circos(
+    
+    return html.Div([
+        legend,
+        dashbio.Circos(
         id='circos-plot',
         layout=circos_data["layout"],
         selectEvent={"0": "hover"},
@@ -669,6 +754,7 @@ def plot_circos(graph_type, selected_svtypes, circos_data, svtype_colors):
         },
         size=800
     )
+])
 
 def load_vcf_dataframe(file_path, source_type):
 
@@ -723,7 +809,7 @@ def load_vcf_dataframe(file_path, source_type):
     except Exception as e:
         print(f"❌ Unexpected error in load_vcf_dataframe(): {e}")
         return None
-def update_tracks(graph_type, selected_svtypes, circos_data, svtype_colors):
+def update_tracks(graph_type, selected_svtypes, circos_data, svtype_color_map):
     if graph_type == "histogram":
         tracks = []
         for track in circos_data.get("tracks", []):
@@ -732,7 +818,7 @@ def update_tracks(graph_type, selected_svtypes, circos_data, svtype_colors):
                     "type": "HISTOGRAM",
                     "data": track["data"],
                     "config": {
-                        "color": svtype_colors.get(track["name"], "#95a5a6"),
+                        "color": svtype_color_map.get(track["name"], "#95a5a6"),
                         "innerRadius": 200,
                         "outerRadius": 250,
                         "opacity": 0.9,
