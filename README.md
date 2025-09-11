@@ -1,7 +1,7 @@
 # SV Evaluation & Visualization Web Tool (SV-EViz)
 
 SV comparison/benchmarking and visualization web tool.  
-Built with Dash, integrates **SURVIVOR (merge)**, **EvalSVcallers (evaluate)**, **Truvari (bench)**, and rich interactive plots along with automated metric calculation.
+Built with Dash, integrates **SURVIVOR (merge)**, **EvalSVcallers (evaluate)**, **Truvari (bench)**, and rich interactive plots.
 
 ---
 
