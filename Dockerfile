@@ -19,8 +19,9 @@ COPY . .
 RUN chmod +x EvalSVcallers-master/scripts/*.pl
 RUN chmod +x SURVIVOR/Debug/SURVIVOR
 
-# Install Python packages
-RUN pip install --no-cache-dir -r requirements.txt
+# Install Python packages including Truvari
+RUN pip install --no-cache-dir -r requirements.txt \
+    && pip install truvari
 
 # Expose port
 EXPOSE 8040
