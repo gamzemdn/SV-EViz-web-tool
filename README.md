@@ -80,7 +80,7 @@ SV-EViz addresses this gap by providing:
 
 ```bash
 docker pull maden21/sv-eviz
-docker run -p 8040:8040 sveviz/sveviz
+docker run -p 8040:8040 maden21/sv-eviz
 ```
 ### Installation (Manuel):
 ```markdown
