@@ -1,0 +1,8 @@
+version: '3'
+services:
+  dashapp:
+    build: .
+    ports:
+      - "8040:8040"
+    volumes:
+      - ./uploaded_files:/app/uploaded_files
