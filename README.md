@@ -48,12 +48,12 @@ SV-EViz addresses this gap by providing:
 
 
 <p align="center">
-  <img src="Resim1.png" width="750">
+  <img src="docs/Resim1.png" width="750">
 </p>
 
 
 <p align="center">
-  <img src="Resim4.png" width="750">
+  <img src="docs/Resim4.png" width="750">
 </p>  
 
 ## Visualization Modules
@@ -67,13 +67,13 @@ SV-EViz addresses this gap by providing:
 
 
 <p align="center">
-  <img src="Resim2.png" width="750">
+  <img src="docs/Resim2.png" width="750">
 </p>  
 
 
 
 <p align="center">
-  <img src="Resim3.png" width="750">
+  <img src="docs/Resim3.png" width="750">
 </p>
 
 ## Installation (Docker)
