@@ -85,7 +85,7 @@ docker run -p 8040:8040 maden21/sv-eviz
 ### Installation (Manuel):
 ```markdown
 git clone https://github.com/gamzemdn/SV-EViz-web-tool.git
-cd SV-EViz
+cd SV-EViz-web-tool
 pip install -r requirements.txt
 python app.py
 ```
