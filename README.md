@@ -96,7 +96,7 @@ SV-EViz was evaluated using Manta output of the HG00514 sample, with the UniVar 
 
 ---
 
-## Citations for Tools Used in This Framework
+## Citations for Frameworks Used in SV-EViz
 SV-EViz was evaluated using Manta output of the HG00514 sample, with the UniVar SV catalog used as the reference dataset. The figures presented here belong to this case study.
 
 - **SURVIVOR** – A tool for merging, comparing, simulating, and evaluating structural variants.  
