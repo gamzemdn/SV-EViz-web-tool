@@ -89,7 +89,7 @@ cd SV-EViz-web-tool
 pip install -r requirements.txt
 python app.py
 ```
-https://sv-eviz-web-tool.onrender.com/
+
 
 ## Case Study
 SV-EViz was evaluated using Manta output of the HG00514 sample, with the UniVar SV catalog used as the reference dataset. The figures presented here belong to this case study.
