@@ -200,7 +200,18 @@ def update_layout(active_tab):
             html.P("Navigate through the tabs to begin your analysis. Hover over graphs for more details, and ensure required files are uploaded in correct formats.",
                    style={'padding': '0 1rem 1rem 1rem', 'fontSize': '15px'
                          # 'fontFamily': '"Times New Roman", Times, serif'
-                         })
+                         }),
+            html.Div(
+                "Developed by Gamze Maden",
+                style={
+                    "position": "fixed",
+                    "bottom": "10px",
+                    "right": "15px",
+                    "fontSize": "12px",
+                    "color": "gray",
+                    "opacity": "0.7"
+                }
+            )
         ])
     elif active_tab == 'tab-visualization':
         controls = html.Div([
