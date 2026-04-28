@@ -1,0 +1,43 @@
+# Use official lightweight Python
+FROM python:3.11-slim
+
+# Install system packages for Perl and C++ binaries
+RUN apt-get update && apt-get install -y \
+    build-essential \
+    zlib1g-dev \
+    libbz2-dev \
+    liblzma-dev \
+    libcurl4-openssl-dev \
+    libssl-dev \
+    git \
+    wget \
+    perl \
+    make \
+    gcc \
+    g++ \
+    && rm -rf /var/lib/apt/lists/*
+
+# Set working directory
+WORKDIR /app
+
+# Copy all app files into container
+COPY . .
+
+# Make sure Perl scripts & SURVIVOR binary are executable
+RUN chmod +x EvalSVcallers-master/scripts/*.pl
+RUN chmod +x SURVIVOR/Debug/SURVIVOR
+
+# Install Python packages including Truvari
+RUN pip install --upgrade pip \
+    && pip install --no-cache-dir -r requirements.txt \
+    && pip install truvari
+
+
+# Expose port
+EXPOSE 8040
+
+# Tell Python to buffer output
+ENV PYTHONUNBUFFERED=1
+
+# Run your Dash app
+CMD ["python", "app.py"]
