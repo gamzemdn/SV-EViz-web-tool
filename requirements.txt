@@ -1,10 +1,12 @@
 numpy==1.23.5
-dash
-dash-bootstrap-components
-dash-bio
-dash-bootstrap-templates
 pandas
-plotly
+dash==2.12.0
+dash-bootstrap-components==1.5.0
+dash-bio==1.0.2
+dash-bootstrap-templates==1.1.0
+plotly==6.1.1
+kaleido==1.2.0
+openpyxl
 flask
 nbformat
 nbconvert

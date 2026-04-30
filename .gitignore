@@ -1,0 +1,40 @@
+# Python cache files
+__pycache__/
+*.pyc
+.ipynb_checkpoints/
+**/.ipynb_checkpoints/
+
+# Runtime uploaded/output files
+uploaded_files/*
+!uploaded_files/.gitkeep
+!uploaded_files/univar.vcf
+!uploaded_files/example_downloads/
+!uploaded_files/example_downloads/**
+!uploaded_files/reference_files/
+!uploaded_files/reference_files/.gitkeep
+
+# Large bioinformatics files
+*.bam
+*.bai
+*.sam
+*.cram
+*.fastq
+*.fq
+*.fa
+*.fasta
+*.fai
+*.tbi
+*.zip
+*.tar
+*.tar.gz
+
+# Keep example files even if they are compressed or VCF-like
+!example_data/
+!example_data/**
+!uploaded_files/example_downloads/
+!uploaded_files/example_downloads/**
+
+# OS/editor files
+.DS_Store
+.vscode/
+.idea/

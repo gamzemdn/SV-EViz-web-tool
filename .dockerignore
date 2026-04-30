@@ -1,19 +1,17 @@
-# Ignore Python cache
-.ipynb_checkpoints/
-__pycache__/
-*.pyc
-*.pyo
-*.pyd
-*.swp
-
-# Ignore notebooks
-*.ipynb
-notebooks/
-
-# Ignore git & editor files
 .git
-*.sw?
-.DS_Store
+__pycache__
+*.pyc
+.ipynb_checkpoints
 
-# Don't send local output data (mounted at runtime)
 uploaded_files/
+*.bam
+*.sam
+*.cram
+*.fastq
+*.fq
+*.gz
+*.zip
+*.tar
+*.tar.gz
+
+.DS_Store

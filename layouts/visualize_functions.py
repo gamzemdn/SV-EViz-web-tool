@@ -11,6 +11,7 @@ import dash_bio as dashbio
 from dash import dcc, html, dash_table
 import flask
 import re
+import gzip
 import numpy as np
 from dash_bio import Clustergram
 # Directories
@@ -66,6 +67,24 @@ svtype_colors = {
     "INV": "#f1c40f", "BND": "#9b59b6"
 }
 
+def open_text_maybe_gzip(file_path):
+    """
+    Opens both plain .vcf/.txt files and compressed .vcf.gz files as text.
+    """
+    if str(file_path).endswith(".gz"):
+        return gzip.open(file_path, "rt", errors="ignore")
+    return open(file_path, "r", errors="ignore")
+
+
+def read_table_maybe_gzip(file_path, **kwargs):
+    """
+    Reads plain or gzipped tabular files with pandas.
+    """
+    return pd.read_csv(
+        file_path,
+        compression="gzip" if str(file_path).endswith(".gz") else "infer",
+        **kwargs
+    )
 # ---- File Saving ----
 def save_file(name, content):
     data = content.encode("utf8").split(b";base64,")[1]
@@ -94,7 +113,7 @@ def extract_variant_types(file_path, source_type):
     try:
         if source_type == 'caller':
             try:
-                df = pd.read_csv(file_path, sep="\t", comment="#", header=None)
+                df = read_table_maybe_gzip(file_path, sep="\t", comment="#", header=None)
                 if df.shape[1] >= 8:
                     df = df.iloc[:, :8]
                     df.columns = ["CHROM", "POS", "SVTYPE", "col4", "col5", "QUAL", "FILTER", "INFO"]
@@ -110,14 +129,14 @@ def extract_variant_types(file_path, source_type):
             svtypes = df["SVTYPE"].dropna().unique().tolist()
 
         elif source_type == 'survivor':
-            df = pd.read_csv(file_path, sep="\t", comment="#", header=None, usecols=range(8))
+            df = read_table_maybe_gzip(file_path, sep="\t", comment="#", header=None, usecols=range(8))
             df.columns = ["CHROM", "POS", "SVTYPE", "col4", "col5", "QUAL", "FILTER", "INFO"]
             df["SVTYPE"] = df["INFO"].str.extract(r"SVTYPE=([^;]+)")
             df["CHROM"] = df["CHROM"].astype(str).str.replace("^chr", "", regex=True)
             svtypes = df["SVTYPE"].dropna().unique().tolist()
 
         elif source_type == 'evalsvcallers':
-            df = pd.read_csv(file_path, sep="\t", header=None)
+            df = read_table_maybe_gzip(file_path, sep="\t", header=None)
             tf_chrom = df[0].astype(str).str.strip().str.split(" ", expand=True)
             df.insert(0, "TF", tf_chrom[0])
             df.insert(1, "CHROM", tf_chrom[1])
@@ -150,8 +169,11 @@ def plot_vcf_data(df):
                 sv_counts, x="Variant Type", y="Count", color="Variant Type", color_discrete_map=svtype_color_map,
                 title="Variant Type Distribution"
             )
-            figures.append(dcc.Graph(figure=fig_svtype))
-
+            
+            figures.append(dcc.Graph(
+                id="variant-type-distribution-figure",
+                figure=fig_svtype
+            ))
             fig_spyder = go.Figure()
             fig_spyder.add_trace(go.Scatterpolar(
                 r=sv_counts["Count"].tolist() + [sv_counts["Count"].tolist()[0]],
@@ -163,16 +185,31 @@ def plot_vcf_data(df):
                 title="Variant Type Radar Chart",
                 showlegend=False
             )
-            figures.append(dcc.Graph(figure=fig_spyder))
 
-    if "#CHROM" in df.columns:
-        chrom_counts = df["#CHROM"].value_counts().reset_index()
+            figures.append(dcc.Graph(
+                id="variant-type-radar-chart-figure",
+                figure=fig_spyder
+            ))
+    
+    chrom_col = None
+    if "CHROM" in df.columns:
+        chrom_col = "CHROM"
+    elif "#CHROM" in df.columns:
+        chrom_col = "#CHROM"
+        
+    if chrom_col:
+        chrom_counts = df[chrom_col].value_counts().reset_index()
         chrom_counts.columns = ["Chromosome", "Variant Count"]
         fig_chr = px.bar(
-            chrom_counts, x="Chromosome", y="Variant Count",
+            chrom_counts,
+            x="Chromosome",
+            y="Variant Count",
             title="Chromosome-Wise Variant Distribution"
         )
-        figures.append(dcc.Graph(figure=fig_chr))
+        figures.append(dcc.Graph(
+            id="chromosome-wise-variant-distribution-figure",
+            figure=fig_chr
+        ))
 
     if "INFO" in df.columns:
         df["SVLEN"] = df["INFO"].str.extract(r'SVLEN=(-?\d+)')
@@ -182,7 +219,11 @@ def plot_vcf_data(df):
                 df, x="SVLEN", nbins=30,
                 title="Variant Length Distribution"
             )
-            figures.append(dcc.Graph(figure=fig_svlen))
+            
+            figures.append(dcc.Graph(
+                id="variant-length-distribution-figure",
+                figure=fig_svlen
+            ))
 
           # ✅ Violin plot (log-transformed absolute SVLEN)
             df["SVLEN_abs"] = df["SVLEN"].abs()
@@ -195,16 +236,23 @@ def plot_vcf_data(df):
                     title="Log-transformed SV Length by Variant Type",
                     labels={"logSVLEN": "log10(SVLEN + 1)"}
                 )
-                figures.append(dcc.Graph(figure=fig_violin))
+                figures.append(dcc.Graph(
+                    id="log-transformed-sv-length-by-variant-type-figure",
+                    figure=fig_violin
+                ))
+                
     return figures
 
 # ---- Circos JSON Builder ----
 def detect_genome_version(vcf_path):
-    with open(vcf_path) as f:
+    with open_text_maybe_gzip(vcf_path) as f:
         for line in f:
-            if not line.startswith("##") and not line.startswith("#CHROM"):
-                chrom = line.split("\t")[0]
-                return "hg38" if chrom.startswith("chr") else "hg19"
+            if line.startswith("#"):
+                continue
+
+            chrom = line.split("\t")[0]
+            return "hg38" if chrom.startswith("chr") else "hg19"
+
     return "hg38"
 def vcf_to_circos_json(vcf_file_path, output_json_path, source_type, bin_size=10_000_000):
     genome = detect_genome_version(vcf_file_path)
@@ -219,7 +267,7 @@ def vcf_to_circos_json(vcf_file_path, output_json_path, source_type, bin_size=10
     histograms = defaultdict(lambda: defaultdict(int))
     svtypes_found = set()
     
-    with open(vcf_file_path) as f:
+    with open_text_maybe_gzip(vcf_file_path) as f:
         for line in f:
             if line.startswith("#") or line.strip() == "":
                 continue
@@ -440,7 +488,12 @@ def plot_sankey(df):
 
     return html.Div([
         legend,
-        dcc.Graph(figure=fig, style={"height": "700px", "width": "100%"})
+        dcc.Graph(
+            id="chromosome-to-svtype-sankey-figure",
+            figure=fig,
+            style={"height": "700px", "width": "100%"}
+        )
+        
     ])
 def plot_clustergram(df, selected_chroms=None):
     # ✅ Always re-extract SVTYPE from INFO
@@ -500,31 +553,82 @@ def plot_clustergram(df, selected_chroms=None):
     
     fig.update_layout(
         **axis_updates,
-        margin=dict(l=110, r=60, t=50, b=110)  # etiketler için alan
+        title="Clustergram Visualization",
+        margin=dict(l=110, r=60, t=50, b=110)
     )
     
-    return dcc.Graph(figure=fig)
-
-
+    return dcc.Graph(
+        id="clustergram-visualization-figure",
+        figure=fig
+    )
+    
 def plot_manhattan(df, selected_svtypes, threshold):
     import numpy as np
+    import pandas as pd
     import plotly.graph_objects as go
-    from dash import dcc
+    from dash import dcc, html
+    import re
 
     highlight_df_list = []
 
-    df = df[df["SVTYPE"].isin(selected_svtypes)]
+    df = df.copy()
+
+    if selected_svtypes:
+        df = df[df["SVTYPE"].isin(selected_svtypes)]
+
+    if df.empty:
+        return html.Div(
+            "⚠️ Manhattan plot could not be generated because no selected SVTYPE records were found.",
+            style={"color": "orange", "fontWeight": "bold"}
+        )
 
     # ✅ Normalize CHROM and map only valid chromosomes
     df["CHROM"] = df["CHROM"].astype(str).str.strip().str.replace("^chr", "", regex=True)
+
     valid_chr_map = {str(i): i for i in range(1, 23)}
     valid_chr_map.update({"X": 23, "Y": 24})
-    df = df[df["CHROM"].isin(valid_chr_map.keys())]
+
+    df = df[df["CHROM"].isin(valid_chr_map.keys())].copy()
+
+    if df.empty:
+        return html.Div(
+            "⚠️ Manhattan plot could not be generated because no valid chromosomes were found.",
+            style={"color": "orange", "fontWeight": "bold"}
+        )
+
     df["CHR"] = df["CHROM"].map(valid_chr_map).astype(int)
 
-    df["BP"] = df["POS"]
-    df["P"] = 10 ** (-df["QUAL"].astype(float) / 200)
-    df = df.dropna(subset=["CHR", "BP", "P", "SVTYPE"])
+    # ✅ POS and QUAL numeric conversion
+    df["BP"] = pd.to_numeric(df["POS"], errors="coerce")
+
+    # QUAL can be "." in Truvari FN / truth-side records.
+    # Convert invalid QUAL values to NaN instead of crashing.
+    df["QUAL"] = pd.to_numeric(df["QUAL"], errors="coerce")
+
+    # ✅ If SVLEN is missing, extract it from INFO for tooltip compatibility.
+    if "SVLEN" not in df.columns or df["SVLEN"].isnull().all():
+        df["SVLEN"] = df["INFO"].apply(
+            lambda x: int(re.search(r"SVLEN=-?\d+", x).group().split("=")[1])
+            if pd.notnull(x) and isinstance(x, str) and re.search(r"SVLEN=-?\d+", x)
+            else None
+        )
+
+    # ✅ Remove records without usable QUAL for QUAL-based Manhattan.
+    df = df.dropna(subset=["CHR", "BP", "QUAL", "SVTYPE"]).copy()
+
+    if df.empty:
+        return html.Div(
+            "⚠️ Manhattan plot could not be generated because this file does not contain valid numeric QUAL values.",
+            style={"color": "orange", "fontWeight": "bold"}
+        )
+
+    # ✅ IMPORTANT FIX:
+    # Instead of calculating P = 10^(-QUAL/200) and then -log10(P),
+    # directly use the mathematically equivalent value QUAL/200.
+    # This avoids divide-by-zero warnings when P underflows to 0.
+    df["neglog10P"] = df["QUAL"] / 200.0
+
+    df = df.dropna(subset=["CHR", "BP", "neglog10P", "SVTYPE"]).copy()
 
     offset = 0
     tick_positions = []
@@ -540,16 +644,20 @@ def plot_manhattan(df, selected_svtypes, threshold):
         tick_labels.append(f"chr{chrom if chrom <= 22 else ('X' if chrom == 23 else 'Y')}")
 
         for svtype in chr_df["SVTYPE"].unique():
-            sv_df = chr_df[chr_df["SVTYPE"] == svtype]
+            sv_df = chr_df[chr_df["SVTYPE"] == svtype].copy()
+
             fig.add_trace(go.Scattergl(
                 x=sv_df["cumulative_bp"],
-                y=-np.log10(sv_df["P"]),
-                mode='markers',
+                y=sv_df["neglog10P"],
+                mode="markers",
                 name=f"chr{chrom}-{svtype}",
-                marker=dict(color=svtype_color_map.get(svtype, "#999999"),size=4),
+                marker=dict(
+                    color=svtype_color_map.get(svtype, "#999999"),
+                    size=4
+                ),
                 customdata=sv_df[["CHROM", "POS", "SVTYPE", "SVLEN", "QUAL"]],
                 hovertemplate=(
-                    "CHROM: %{customdata[0]}<br>"
+                    "CHROM: chr%{customdata[0]}<br>"
                     "POS: %{customdata[1]}<br>"
                     "SVTYPE: %{customdata[2]}<br>"
                     "SVLEN: %{customdata[3]}<br>"
@@ -558,7 +666,8 @@ def plot_manhattan(df, selected_svtypes, threshold):
                 )
             ))
 
-        highlight_chr_df = chr_df[-np.log10(chr_df["P"]) > threshold]
+        highlight_chr_df = chr_df[chr_df["neglog10P"] > threshold].copy()
+
         if not highlight_chr_df.empty:
             highlight_df_list.append(highlight_chr_df)
 
@@ -566,10 +675,11 @@ def plot_manhattan(df, selected_svtypes, threshold):
 
     if highlight_df_list:
         all_high = pd.concat(highlight_df_list)
+
         fig.add_trace(go.Scattergl(
             x=all_high["cumulative_bp"],
-            y=-np.log10(all_high["P"]),
-            mode='markers',
+            y=all_high["neglog10P"],
+            mode="markers",
             name="Points of Interest",
             marker=dict(color="red", size=6),
             showlegend=True
@@ -577,59 +687,94 @@ def plot_manhattan(df, selected_svtypes, threshold):
 
     fig.add_shape(
         type="line",
-        x0=0, x1=offset,
-        y0=threshold, y1=threshold,
+        x0=0,
+        x1=offset,
+        y0=threshold,
+        y1=threshold,
         line=dict(color="red", dash="dash")
     )
 
     fig.update_layout(
-            title="Interactive Manhattan Plot for Structural Variants",
-            xaxis=dict(tickmode='array', tickvals=tick_positions, ticktext=tick_labels),
-            yaxis_title="-log10(P) (simulated from QUAL)",
-            height=600,
-            margin=dict(t=50, l=60, r=30, b=60)
-        )
+        title="Interactive Manhattan Plot for Structural Variants",
+        xaxis=dict(
+            tickmode="array",
+            tickvals=tick_positions,
+            ticktext=tick_labels
+        ),
+        yaxis_title="-log10(P) estimated from QUAL",
+        height=600,
+        margin=dict(t=50, l=60, r=30, b=60)
+    )
 
     # === SVTYPE Legend ===
-    svtypes = df["SVTYPE"].unique().tolist()
+    svtypes = df["SVTYPE"].dropna().unique().tolist()
+
     legend = html.Div([
         html.Div([
             html.Span(style={
-                'backgroundColor': svtype_color_map.get(sv, '#999999'),
-                'display': 'inline-block',
-                'width': '15px',
-                'height': '15px',
-                'marginRight': '5px',
-                'borderRadius': '3px'
+                "backgroundColor": svtype_color_map.get(sv, "#999999"),
+                "display": "inline-block",
+                "width": "15px",
+                "height": "15px",
+                "marginRight": "5px",
+                "borderRadius": "3px"
             }),
-            html.Span(f"{sv}", style={'marginRight': '15px', 'fontSize': '14px'})
-        ], style={'display': 'inline-block'}) for sv in svtypes
-    ], style={'padding': '10px 0', 'textAlign': 'left'})
+            html.Span(
+                f"{sv}",
+                style={"marginRight": "15px", "fontSize": "14px"}
+            )
+        ], style={"display": "inline-block"})
+        for sv in svtypes
+    ], style={"padding": "10px 0", "textAlign": "left"})
 
-
-    
     return html.Div([
         html.Div(
-            "⚠️ If plot is empty, check QUAL column.",
+            "ℹ️ QUAL-based Manhattan score is calculated as QUAL / 200, equivalent to −log10(P) where P = 10^(−QUAL / 200).",
             style={
-                'color': 'orange',
-                'fontWeight': 'bold',
-                'textAlign': 'left',
-                'marginTop': '0px',
-                'marginBottom': '20px'
+                "color": "#555",
+                "fontWeight": "normal",
+                "textAlign": "left",
+                "marginTop": "0px",
+                "marginBottom": "20px",
+                "fontSize": "13px"
             }
         ),
         legend,
-        dcc.Graph(figure=fig)
-
+        dcc.Graph(
+            id="qual-based-manhattan-figure",
+            figure=fig
+        )
+        
     ])
+def plot_manhattan_svlen(df, selected_svtypes, log10_threshold):
+    """
+    Manhattan plot using SV length (SVLEN) on the Y-axis (log₁₀ scale).
 
-def plot_manhattan_svlen(df, selected_svtypes, threshold):
+    Parameters
+    ----------
+    df : pd.DataFrame
+        Parsed VCF data frame containing CHROM, POS, SVTYPE, SVLEN columns.
+    selected_svtypes : list of str
+        SV types to include in the plot (e.g. ['DEL', 'INS']).
+    log10_threshold : float
+        Threshold expressed in log₁₀(SVLEN) space, consistent with the
+        logarithmic Y-axis.  Variants whose log₁₀(SVLEN) exceeds this value
+        are highlighted in red as 'Points of Interest'.
+        Default slider value is 4, corresponding to SVLEN > 10,000 bp.
+        Examples:
+            3  → SVLEN > 1,000 bp
+            4  → SVLEN > 10,000 bp  (default)
+            5  → SVLEN > 100,000 bp
+            6  → SVLEN > 1,000,000 bp
+    """
     import numpy as np
     import plotly.graph_objects as go
     from dash import dcc
 
     highlight_df_list = []
+
+    # ── convert log10 threshold to actual bp for annotation ──────────────
+    svlen_threshold_bp = 10 ** log10_threshold
 
     df = df[df["SVTYPE"].isin(selected_svtypes)]
     df["CHROM"] = df["CHROM"].astype(str).str.strip().str.replace("^chr", "", regex=True)
@@ -641,7 +786,7 @@ def plot_manhattan_svlen(df, selected_svtypes, threshold):
     df["BP"] = pd.to_numeric(df["POS"], errors="coerce")
     df["SVLEN"] = pd.to_numeric(df["SVLEN"], errors="coerce")
     df = df.dropna(subset=["CHR", "BP", "SVLEN", "SVTYPE"])
-    df = df[df["SVLEN"] > 0]  # remove zeros since log scale can't handle them
+    df = df[df["SVLEN"] > 0]   # log scale cannot handle zero
 
     offset = 0
     tick_positions = []
@@ -668,12 +813,12 @@ def plot_manhattan_svlen(df, selected_svtypes, threshold):
                     "CHROM: %{customdata[0]}<br>"
                     "POS: %{customdata[1]}<br>"
                     "SVTYPE: %{customdata[2]}<br>"
-                    "SVLEN: %{customdata[3]}<br>"
-                    "SVLEN: %{y}<extra></extra>"
+                    "SVLEN: %{customdata[3]:,} bp<extra></extra>"
                 )
             ))
 
-        highlight_chr_df = chr_df[chr_df["SVLEN"] > threshold]
+        # ── highlight in log10 space (consistent with Y-axis) ────────────
+        highlight_chr_df = chr_df[np.log10(chr_df["SVLEN"]) > log10_threshold]
         if not highlight_chr_df.empty:
             highlight_df_list.append(highlight_chr_df)
 
@@ -685,28 +830,50 @@ def plot_manhattan_svlen(df, selected_svtypes, threshold):
             x=all_high["cumulative_bp"],
             y=all_high["SVLEN"],
             mode='markers',
-            name="Points of Interest",
+            name=f"Points of Interest (SVLEN > {int(svlen_threshold_bp):,} bp)",
             marker=dict(color="red", size=6),
             showlegend=True
         ))
 
+    # ── threshold line in actual SVLEN units (plot is already log-scaled) ─
     fig.add_shape(
         type="line",
         x0=0, x1=offset,
-        y0=threshold, y1=threshold,
+        y0=svlen_threshold_bp, y1=svlen_threshold_bp,
         line=dict(color="red", dash="dash")
     )
 
-    fig.update_layout(
-        title="Interactive Manhattan Plot for SVLEN (log scale)",
-        xaxis=dict(tickmode='array', tickvals=tick_positions, ticktext=tick_labels),
-        yaxis=dict(title="SVLEN", type="log"),
-        height=600,
-        margin=dict(t=50, l=60, r=30, b=60)
+    # Annotation on the threshold line
+    fig.add_annotation(
+        x=offset * 0.02,
+        y=svlen_threshold_bp,
+        text=f"Threshold: {int(svlen_threshold_bp):,} bp",
+        showarrow=False,
+        yshift=8,
+        font=dict(size=11, color="red"),
+        xanchor="left"
     )
 
-    return dcc.Graph(figure=fig)
+    fig.update_layout(
+        title="Interactive Manhattan Plot — SV Length Distribution Across Chromosomes",
+        xaxis=dict(
+            title="Chromosome",
+            tickmode='array',
+            tickvals=tick_positions,
+            ticktext=tick_labels
+        ),
+        yaxis=dict(
+            title="SV Length (bp, log₁₀ scale)",
+            type="log"
+        ),
+        height=600,
+        margin=dict(t=60, l=80, r=30, b=60)
+    )
 
+    return dcc.Graph(
+        id="svlen-based-manhattan-figure",
+        figure=fig
+    )
 def plot_circos(graph_type, selected_svtypes, circos_data, svtype_color_map):
     if not circos_data:
         return html.Div("No Circos data available.")
@@ -763,7 +930,7 @@ def load_vcf_dataframe(file_path, source_type):
             return None
 
         if source_type == 'evalsvcallers':
-            df = pd.read_csv(file_path, sep="\t", header=None)
+            df = read_table_maybe_gzip(file_path, sep="\t", header=None)
             # ✅ Step 1: Split TF + CHROM from column 0 if needed
             
             tf_chrom = df[0].astype(str).str.strip().str.split(" ", expand=True)
@@ -777,7 +944,7 @@ def load_vcf_dataframe(file_path, source_type):
                 df.columns = ["CHROM", "POS", "SVTYPE", "col4", "col5", "QUAL", "FILTER", "INFO"]
         else:
             try:
-                df = pd.read_csv(file_path, sep="\t", comment="#", header=None)
+                df = read_table_maybe_gzip(file_path, sep="\t", comment="#", header=None)
                 if df.shape[1] >= 8:
                     df = df.iloc[:, :8]
                     df.columns = ["CHROM", "POS", "SVTYPE", "col4", "col5", "QUAL", "FILTER", "INFO"]

@@ -1,6 +1,7 @@
 from dash import html, dcc
 import dash_bootstrap_components as dbc
 import os
+from layouts.truvari_functions import get_reference_options, REFERENCE_FILES_DIR
 
 def get_truvari_layout():
     shared_input_style = {
@@ -20,13 +21,7 @@ def get_truvari_layout():
     }
 
     # Read .fa files from uploaded_files for reference selector
-    ref_options = [
-        {"label": "GRCh38", "value": os.path.join("uploaded_files", f)}
-        for f in os.listdir("uploaded_files") if "GRCh38" in f and f.endswith(".fa")
-    ] + [
-        {"label": "HG19", "value": os.path.join("uploaded_files", f)}
-        for f in os.listdir("uploaded_files") if ("HG19" in f or "hs37d5" in f) and f.endswith(".fa")
-    ]
+    ref_options = get_reference_options()
 
     return html.Div([
         html.H3("Select Base VCF File (.vcf)", style={'marginTop': '20px', 'fontFamily': '"Times New Roman", Times, serif', 'fontSize': '20px'}),
@@ -35,7 +30,7 @@ def get_truvari_layout():
             id="base_choice",
             options=[
                 {"label": "Univar SV Katalog", "value": "univar"},
-                {"label": "Upload Custom Reference", "value": "custom"}
+                {"label": "Upload Custom Truth Set", "value": "custom"}
                 
                
             ],
@@ -73,16 +68,166 @@ def get_truvari_layout():
                 multiple=False
             )
         ], style={'width': '100%'}),
-
+        
         html.Div([
-            html.Label("Select Reference Genome:", style=shared_label_style),
-            dcc.Dropdown(
-                id='tru-ref-selector',
-                options=ref_options,
-                placeholder="Select reference (.fa) from uploaded_files",
-                style={'width': '100%'}
+            html.Label("Reference genome input:", style=shared_label_style),
+        
+            dcc.RadioItems(
+                id="tru-ref-input-mode",
+                options=[
+                    {"label": "Select from reference folder", "value": "folder"},
+                    {"label": "Upload custom reference FASTA", "value": "upload"}
+                ],
+                value="folder",
+                inline=False,
+                labelStyle={
+                    'display': 'block',
+                    'fontFamily': '"Times New Roman", Times, serif',
+                    'marginBottom': '5px'
+                }
+            ),
+        
+            html.Div(
+                id="tru-ref-dropdown-container",
+                children=[
+                    html.Label("Select reference genome:", style=shared_label_style),
+        
+                    dcc.Dropdown(
+                        id='tru-ref-selector',
+                        options=ref_options,
+                        placeholder="Select reference FASTA from reference_files folder",
+                        style={'width': '100%'}
+                    ),
+        
+                    html.Div(
+                        id='tru-ref-selected-info',
+                        style={
+                            'marginTop': '5px',
+                            'fontFamily': '"Times New Roman", Times, serif'
+                        }
+                    ),
+        
+                    html.Small(
+                        "If the required reference genome is not listed, copy the FASTA file into "
+                        "`uploaded_files/reference_files/` in a local deployment, or mount this directory in Docker. "
+                        "After refreshing the page, the reference FASTA will appear in this dropdown.",
+                        style={
+                            'display': 'block',
+                            'color': 'gray',
+                            'fontFamily': '"Times New Roman", Times, serif',
+                            'marginTop': '5px',
+                            'marginBottom': '10px'
+                        }
+                    )
+                                    ],
+                style={'display': 'block', 'width': '100%'}
+            ),
+        
+            html.Div(
+                id="tru-ref-upload-container",
+                children=[
+                    dbc.Alert(
+                        [
+                            html.Div("Upload mode selected.", style={"fontWeight": "bold"}),
+                            html.Div(
+                                "After selecting a reference FASTA file, please wait until the upload-completed message appears. "
+                                "Large reference files may take several minutes and the browser may appear inactive during upload."
+                            ),
+                            html.Div(
+                                "For large reference genomes, copying the FASTA file into the reference_files folder or mounting it with Docker is recommended."
+                            )
+                        ],
+                        color="warning",
+                        style={
+                            "fontFamily": '"Times New Roman", Times, serif',
+                            "fontSize": "13px",
+                            "marginTop": "10px"
+                        }
+                    ),
+            
+                    dcc.Upload(
+                        id='tru-ref-upload',
+                        children=html.Div(['📎 Upload custom reference FASTA (.fa/.fasta/.fna)']),
+                        style={
+                            'width': '100%',
+                            'height': '60px',
+                            'lineHeight': '60px',
+                            'borderWidth': '1px',
+                            'borderStyle': 'dashed',
+                            'borderRadius': '5px',
+                            'textAlign': 'center',
+                            'margin': '10px 0',
+                            'fontFamily': '"Times New Roman", Times, serif',
+                            'backgroundColor': '#f8f9fa'
+                        },
+                        multiple=False
+                    )
+            
+                ],
+                style={'display': 'none', 'width': '100%'}
             )
-        ], style={'width': '100%','marginBottom': '20px'}),
+        ], style={'width': '100%', 'marginBottom': '20px'}),
+                
+            html.Div([
+                html.Label("High-confident region BED restriction (--includebed):", style=shared_label_style),
+            
+                dcc.RadioItems(
+                    id="tru-bed-mode",
+                    options=[
+                        {"label": "Do not use BED file", "value": "no_bed"},
+                        {"label": "Use BED file", "value": "use_bed"}
+                    ],
+                    value="no_bed",
+                    inline=False,
+                    labelStyle={
+                        'display': 'block',
+                        'fontFamily': '"Times New Roman", Times, serif',
+                        'marginBottom': '5px'
+                    }
+                ),
+            
+                html.Div(
+                    id="tru-bed-upload-container",
+                    children=[
+                        dcc.Upload(
+                            id='tru-bed-upload',
+                            children=html.Div(['📎 Drag and Drop or Select BED File']),
+                            style={
+                                'width': '100%',
+                                'height': '60px',
+                                'lineHeight': '60px',
+                                'borderWidth': '1px',
+                                'borderStyle': 'dashed',
+                                'borderRadius': '5px',
+                                'textAlign': 'center',
+                                'margin': '10px',
+                                'fontFamily': '"Times New Roman", Times, serif'
+                            },
+                            multiple=False
+                        ),
+            
+                        html.Div(
+                            id='tru-bed-upload-info',
+                            style={
+                                'marginTop': '5px',
+                                'fontFamily': '"Times New Roman", Times, serif'
+                            }
+                        ),
+            
+                        html.Small(
+                            "If provided, Truvari benchmarking will be restricted to the confident genomic regions in this BED file.",
+                            style={
+                                'display': 'block',
+                                'color': 'gray',
+                                'fontFamily': '"Times New Roman", Times, serif',
+                                'marginLeft': '10px',
+                                'marginBottom': '15px'
+                            }
+                        )
+                    ],
+                    style={'display': 'none', 'width': '100%'}
+                )
+            ], style={'width': '100%', 'marginBottom': '20px'}),
 
      #   html.H4("Truvari Parameters", style={'fontFamily': '"Times New Roman", Times, serif', 'marginTop': '20px'}),
 

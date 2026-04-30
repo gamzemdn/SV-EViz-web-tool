@@ -297,8 +297,7 @@ def generate_truvari_visuals(df):
     import numpy as np
     import pandas as pd
     import plotly.express as px
-    from dash import html, dcc
-    import dash_table
+    from dash import html, dcc, dash_table
 
     # Nested yapıları at
     df = df[~df["Value"].apply(lambda x: isinstance(x, (dict, list)) or x is None)].copy()
@@ -450,7 +449,12 @@ def parse_evalsvcallers_file(contents):
                 })
     df_ref = pd.DataFrame(ref_data)
     pivot_ref = df_ref.pivot(index=["Ref Variant", "Total"], columns="Size Category", values="Count").reset_index()
-    pivot_ref = pivot_ref.apply(pd.to_numeric, errors="ignore")
+    for col in pivot_ref.columns:
+        try:
+            pivot_ref[col] = pd.to_numeric(pivot_ref[col])
+        except (ValueError, TypeError):
+            pass
+    
     if "short (<= 1.0 kp)" in pivot_ref.columns and "short (<=1.0 kp)" in pivot_ref.columns:
         pivot_ref["short (<=1.0 kp)"] = pivot_ref["short (<= 1.0 kp)"].fillna(0).astype(int) + pivot_ref["short (<=1.0 kp)"].fillna(0).astype(int)
         pivot_ref.drop(columns=["short (<= 1.0 kp)"], inplace=True)
@@ -539,7 +543,7 @@ def parse_evalsvcallers_file(contents):
     return pivot_ref, pd.DataFrame(records), pd.DataFrame(df_blocks)
 
 def generate_evalsvcallers_visuals(pivot_ref, df_long, df_block):
-    import dash_table
+    from dash import dash_table
     import plotly.express as px
     from dash import html, dcc
     
@@ -702,8 +706,7 @@ def process_survivor_metrics_from_content(ref_content, caller_content, inter_con
 
 def generate_survivor_visuals(metrics_df):
     import plotly.express as px
-    from dash import html, dcc
-    import dash_table
+    from dash import html, dcc,dash_table
 
     return html.Div([
         dash_table.DataTable(

@@ -13,6 +13,8 @@ sys.path.insert(0, os.path.abspath(os.path.join(APP_ROOT, "..")))
 UPLOAD_DIRECTORY = os.path.join(APP_ROOT, "..", "uploaded_files")
 TRUVARI_OUTPUT_DIR = os.path.join(UPLOAD_DIRECTORY, "truvari_output")
 os.makedirs(TRUVARI_OUTPUT_DIR, exist_ok=True)
+TRUVARI_UPLOAD_CACHE_DIR = os.path.join(TRUVARI_OUTPUT_DIR, "upload_cache")
+os.makedirs(TRUVARI_UPLOAD_CACHE_DIR, exist_ok=True)
 # Son oluşturulan run klasörü (global pointer)
 
 
@@ -54,14 +56,162 @@ svtype_colors = {
     "DEL": "#e74c3c", "INS": "#3498db", "DUP": "#2ecc71",
     "INV": "#f1c40f", "BND": "#9b59b6"
 }
+def _add_required_sv_vcf_headers(input_vcf, output_vcf, run_dir, logf):
+    """
+    Safely add missing standard SV VCF header definitions before #CHROM.
+    This avoids bcftools annotate failures caused by duplicate or conflicting
+    header definitions.
+    """
+    import gzip
+    import os
+    import re
 
+    def open_in(path):
+        return gzip.open(path, "rt") if str(path).endswith(".gz") else open(path, "r")
+
+    def open_out(path):
+        return gzip.open(path, "wt") if str(path).endswith(".gz") else open(path, "w")
+
+    required_headers = {
+        "INFO": {
+            "END": '##INFO=<ID=END,Number=1,Type=Integer,Description="End position of the variant described in this record">',
+            "SVTYPE": '##INFO=<ID=SVTYPE,Number=1,Type=String,Description="Type of structural variant">',
+            "SVLEN": '##INFO=<ID=SVLEN,Number=.,Type=Integer,Description="Difference in length between REF and ALT alleles">',
+            "CIPOS": '##INFO=<ID=CIPOS,Number=2,Type=Integer,Description="Confidence interval around POS for imprecise variants">',
+            "CIEND": '##INFO=<ID=CIEND,Number=2,Type=Integer,Description="Confidence interval around END for imprecise variants">',
+        },
+        "FORMAT": {
+            "GT": '##FORMAT=<ID=GT,Number=1,Type=String,Description="Genotype">',
+            "DP": '##FORMAT=<ID=DP,Number=1,Type=Integer,Description="Read depth">',
+            "AD": '##FORMAT=<ID=AD,Number=R,Type=Integer,Description="Allelic depths">',
+            "LN": '##FORMAT=<ID=LN,Number=1,Type=Integer,Description="Variant length">',
+            "SP": '##FORMAT=<ID=SP,Number=1,Type=Integer,Description="Per sample SV support">',
+        }
+    }
+
+    existing_info_ids = set()
+    existing_format_ids = set()
+    lines = []
+
+    with open_in(input_vcf) as fin:
+        for line in fin:
+            stripped = line.rstrip("\n")
+            lines.append(stripped)
+
+            if stripped.startswith("##INFO=<ID="):
+                m = re.search(r"##INFO=<ID=([^,>]+)", stripped)
+                if m:
+                    existing_info_ids.add(m.group(1))
+
+            elif stripped.startswith("##FORMAT=<ID="):
+                m = re.search(r"##FORMAT=<ID=([^,>]+)", stripped)
+                if m:
+                    existing_format_ids.add(m.group(1))
+
+    missing_headers = []
+
+    for key, header_line in required_headers["INFO"].items():
+        if key not in existing_info_ids:
+            missing_headers.append(header_line)
+
+    for key, header_line in required_headers["FORMAT"].items():
+        if key not in existing_format_ids:
+            missing_headers.append(header_line)
+
+    if not missing_headers:
+        shutil.copy2(input_vcf, output_vcf)
+        logf.write(f"✅ Required SV headers already exist in: {input_vcf}\n")
+        logf.flush()
+        return os.path.abspath(output_vcf)
+
+    wrote_headers = False
+
+    with open_out(output_vcf) as fout:
+        for line in lines:
+            if line.startswith("#CHROM") and not wrote_headers:
+                for header_line in missing_headers:
+                    fout.write(header_line + "\n")
+                wrote_headers = True
+
+            fout.write(line + "\n")
+
+    logf.write(
+        f"🔧 Added {len(missing_headers)} missing SV header lines to: {input_vcf}\n"
+    )
+    logf.flush()
+
+    return os.path.abspath(output_vcf)
 def save_uploaded_file(name, content):
+    """
+    Save uploaded Truvari input files into a temporary upload cache.
+    The files are later copied into the specific run folder under:
+    truvari_output/run_YYYYMMDD_HHMMSS/inputs/
+    """
+
+    # ✅ Ensure cache directory exists at the exact moment of upload
+    os.makedirs(TRUVARI_UPLOAD_CACHE_DIR, exist_ok=True)
+
+    if not content:
+        raise ValueError("No uploaded file content received.")
+
+    if not name:
+        raise ValueError("Uploaded file name is missing.")
+
     data = content.encode("utf8").split(b";base64,")[1]
-    filepath = os.path.join(TRUVARI_OUTPUT_DIR, name)
+
+    safe_name = os.path.basename(name)
+    filepath = os.path.abspath(os.path.join(TRUVARI_UPLOAD_CACHE_DIR, safe_name))
+
     with open(filepath, "wb") as f:
         f.write(base64.b64decode(data))
-    return os.path.abspath(filepath)
 
+    return filepath
+    
+REFERENCE_FILES_DIR = os.path.join(UPLOAD_DIRECTORY, "reference_files")
+os.makedirs(REFERENCE_FILES_DIR, exist_ok=True)
+
+REFERENCE_EXTENSIONS = (".fa", ".fasta", ".fna")
+
+
+def get_reference_options():
+    """
+    List reference FASTA files available in uploaded_files/reference_files.
+    These files can be copied manually, mounted through Docker, or uploaded
+    through the SV-EViz interface.
+    """
+    options = []
+
+    if not os.path.exists(REFERENCE_FILES_DIR):
+        os.makedirs(REFERENCE_FILES_DIR, exist_ok=True)
+
+    for filename in sorted(os.listdir(REFERENCE_FILES_DIR)):
+        if filename.lower().endswith(REFERENCE_EXTENSIONS):
+            full_path = os.path.abspath(os.path.join(REFERENCE_FILES_DIR, filename))
+            options.append({
+                "label": filename,
+                "value": full_path
+            })
+
+    return options
+
+
+def save_uploaded_reference_file(name, content):
+    """
+    Save an uploaded reference FASTA file into uploaded_files/reference_files.
+    This is intended mainly for smaller custom FASTA files or testing.
+    Large WGS references should preferably be copied/mounted into this folder.
+    """
+    if not name.lower().endswith(REFERENCE_EXTENSIONS):
+        raise ValueError("Reference genome must be a .fa, .fasta, or .fna file.")
+
+    data = content.encode("utf8").split(b";base64,")[1]
+    filepath = os.path.abspath(os.path.join(REFERENCE_FILES_DIR, name))
+
+    with open(filepath, "wb") as f:
+        f.write(base64.b64decode(data))
+
+    return filepath
+    
 def _run(cmd, logf, env=None):
     logf.write(" ".join(cmd) + "\n")
     logf.flush()
@@ -70,7 +220,240 @@ def _run(cmd, logf, env=None):
     logf.flush()
     r.check_returncode()
     return r
+def clean_vcf_for_truvari(input_vcf, output_vcf, logf):
+    """
+    Cleans VCF records before Truvari:
+    - Keeps header lines unchanged.
+    - Fixes missing/invalid END using SVLEN when possible.
+    - Fixes missing SVLEN using END when possible.
+    - Keeps INS with END=POS.
+    - Drops records that still have invalid END/SVLEN after correction.
+    """
+    import gzip
+    import re
 
+    def open_in(path):
+        return gzip.open(path, "rt") if str(path).endswith(".gz") else open(path, "r")
+
+    def open_out(path):
+        return gzip.open(path, "wt") if str(path).endswith(".gz") else open(path, "w")
+
+    kept = 0
+    fixed = 0
+    dropped = 0
+
+    with open_in(input_vcf) as fin, open_out(output_vcf) as fout:
+        for line in fin:
+            if line.startswith("#"):
+                fout.write(line)
+                continue
+
+            parts = line.rstrip("\n").split("\t")
+            if len(parts) < 8:
+                dropped += 1
+                continue
+
+            chrom = parts[0]
+            try:
+                pos = int(parts[1])
+            except Exception:
+                dropped += 1
+                continue
+
+            info_items = [] if parts[7] == "." else parts[7].split(";")
+            info = {}
+
+            for item in info_items:
+                if "=" in item:
+                    k, v = item.split("=", 1)
+                    info[k] = v
+
+            svtype = info.get("SVTYPE", "").upper()
+
+            # Skip unsupported/ambiguous records for this workflow
+            if svtype in ["", "BND"]:
+                dropped += 1
+                continue
+
+            end = None
+            svlen = None
+
+            if info.get("END") not in [None, "", "."]:
+                try:
+                    end = int(info["END"])
+                except Exception:
+                    end = None
+
+            if info.get("SVLEN") not in [None, "", "."]:
+                try:
+                    svlen = int(str(info["SVLEN"]).split(",")[0])
+                except Exception:
+                    svlen = None
+
+            changed = False
+
+            # Fix SVLEN if missing but END is valid
+            if svlen is None and end is not None:
+                if svtype == "INS":
+                    svlen = abs(end - pos) if end != pos else 1
+                elif end > pos:
+                    length = abs(end - pos)
+                    svlen = -length if svtype == "DEL" else length
+                else:
+                    svlen = None
+
+                if svlen is not None:
+                    info["SVLEN"] = str(svlen)
+                    changed = True
+
+            # Fix END if missing or invalid using SVLEN
+            if end is None or end < pos or (end == pos and svtype != "INS"):
+                if svlen is not None:
+                    if svtype == "INS":
+                        end = pos
+                    else:
+                        end = pos + abs(svlen)
+
+                    info["END"] = str(end)
+                    changed = True
+
+            # Final validation
+            if svlen is None:
+                dropped += 1
+                continue
+
+            if end is None:
+                dropped += 1
+                continue
+
+            if svtype == "INS":
+                # INS may have END == POS
+                if end < pos:
+                    dropped += 1
+                    continue
+            else:
+                # DEL/DUP/INV/etc. require END > POS
+                if end <= pos:
+                    dropped += 1
+                    continue
+
+            if changed:
+                fixed += 1
+
+                # Rebuild INFO field while preserving existing keys as much as possible
+                seen = set()
+                new_info_items = []
+
+                for item in info_items:
+                    if "=" in item:
+                        k, _ = item.split("=", 1)
+                        if k in info:
+                            new_info_items.append(f"{k}={info[k]}")
+                            seen.add(k)
+                        else:
+                            new_info_items.append(item)
+                    else:
+                        new_info_items.append(item)
+
+                for k in ["END", "SVLEN"]:
+                    if k not in seen and k in info:
+                        new_info_items.append(f"{k}={info[k]}")
+
+                parts[7] = ";".join(new_info_items)
+
+            fout.write("\t".join(parts) + "\n")
+            kept += 1
+
+    logf.write(
+        f"🔧 Truvari VCF cleaning completed for {input_vcf}: "
+        f"kept={kept}, fixed={fixed}, dropped={dropped}\n"
+    )
+    logf.flush()
+
+def _remove_from_truvari_upload_cache(path):
+    """
+    Remove temporary uploaded file after it has been copied into the run-specific inputs folder.
+    Only files inside truvari_upload_cache are deleted.
+    """
+    try:
+        if not path:
+            return
+
+        path = os.path.abspath(path)
+        cache_dir = os.path.abspath(TRUVARI_UPLOAD_CACHE_DIR)
+
+        if os.path.exists(path) and os.path.commonpath([path, cache_dir]) == cache_dir:
+            os.remove(path)
+
+    except Exception:
+        pass
+def _detect_vcf_extension(path):
+    lower = str(path).lower()
+
+    if lower.endswith(".vcf.gz"):
+        return ".vcf.gz"
+    if lower.endswith(".vcf"):
+        return ".vcf"
+    if lower.endswith(".bed.gz"):
+        return ".bed.gz"
+    if lower.endswith(".bed"):
+        return ".bed"
+
+    return os.path.splitext(path)[1]
+
+
+def _copy_input_to_run_folder(src_path, inputs_dir, target_prefix):
+    """
+    Copy an original input file into the current Truvari run inputs folder.
+    Example:
+        comp.vcf.gz -> inputs/comp_input.vcf.gz
+    """
+    src_path = os.path.abspath(src_path)
+
+    if not os.path.exists(src_path):
+        raise FileNotFoundError(f"Input file not found: {src_path}")
+
+    ext = _detect_vcf_extension(src_path)
+    dst_path = os.path.join(inputs_dir, f"{target_prefix}{ext}")
+
+    if os.path.abspath(src_path) != os.path.abspath(dst_path):
+        shutil.copy2(src_path, dst_path)
+
+    return os.path.abspath(dst_path)
+
+
+def _write_truvari_input_manifest(
+    manifest_path,
+    base_original,
+    base_run,
+    comp_original,
+    comp_run,
+    reference_fa,
+    bed_original=None,
+    bed_run=None
+):
+    with open(manifest_path, "w") as f:
+        f.write("Truvari Run Input Manifest\n")
+        f.write("==========================\n\n")
+
+        f.write("[BASE VCF]\n")
+        f.write(f"Original path: {base_original}\n")
+        f.write(f"Run copy:      {base_run}\n\n")
+
+        f.write("[COMP VCF]\n")
+        f.write(f"Original path: {comp_original}\n")
+        f.write(f"Run copy:      {comp_run}\n\n")
+
+        f.write("[REFERENCE FASTA]\n")
+        f.write(f"Path used:     {reference_fa}\n")
+        f.write("Note: The reference FASTA is not copied into each run folder to avoid duplicating large genome files.\n\n")
+
+        f.write("[BED FILE]\n")
+        if bed_original and bed_run:
+            f.write(f"Original path: {bed_original}\n")
+            f.write(f"Run copy:      {bed_run}\n")
+        else:
+            f.write("No BED file was used.\n")
 def run_truvari_pipeline(base_choice, base_vcf_uploaded, comp_vcf, reference_fa, params=None):
     """
     Uçtan uca: sort/index -> ref.bed -> comp temizle (INFO/END>POS) -> onref -> GT header -> reheader -> sort -> chr filtresi -> truvari bench
@@ -86,14 +469,29 @@ def run_truvari_pipeline(base_choice, base_vcf_uploaded, comp_vcf, reference_fa,
         if not base_vcf_uploaded:
             return html.Div("❌ No custom base VCF uploaded."), None
         base_vcf = os.path.abspath(base_vcf_uploaded)
-
-
-
-    
+    reference_fa = os.path.abspath(reference_fa)
     ts = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
     run_dir = os.path.join(TRUVARI_OUTPUT_DIR, f"run_{ts}")
     os.makedirs(run_dir, exist_ok=True)
+    inputs_dir = os.path.join(run_dir, "inputs")
+    os.makedirs(inputs_dir, exist_ok=True)
     output_dir = os.path.join(run_dir, "truvari_output")
+    # Keep original input paths before copying them into the run folder
+    base_original_path = os.path.abspath(base_vcf)
+    comp_original_path = os.path.abspath(comp_vcf)
+
+    # Copy BASE and COMP files into this specific run folder
+    base_vcf = _copy_input_to_run_folder(
+        base_original_path,
+        inputs_dir,
+        "base_input"
+    )
+
+    comp_vcf = _copy_input_to_run_folder(
+        comp_original_path,
+        inputs_dir,
+        "comp_input"
+    )
     # Truvari kendi oluşturmak ister; varsa sil, asla önceden yaratma
     if os.path.exists(output_dir):
         shutil.rmtree(output_dir)
@@ -101,23 +499,148 @@ def run_truvari_pipeline(base_choice, base_vcf_uploaded, comp_vcf, reference_fa,
     log_path = os.path.join(run_dir, "truvari_run.log")
     with open(log_path, "w") as logf:
         try:
-            # 1) BASE sort/index
+            logf.write(f"🔧 Using reference FASTA: {reference_fa}\n")
+            fai_path = reference_fa + ".fai"
+            
+            if os.path.exists(fai_path):
+                logf.write(f"✅ Existing FASTA index found: {fai_path}\n")
+            else:
+                logf.write("🔧 FASTA index not found. Creating .fai with samtools faidx\n")
+                _run(["samtools", "faidx", reference_fa], logf)
+            
+            if not os.path.exists(fai_path):
+                raise FileNotFoundError(f"FASTA index could not be created: {fai_path}")
+    
+            # Optional confident-region BED file: copy into the current run folder
+            bed_original_path = None
+            bed_run_path = None
+
+            if params and params.get("--includebed"):
+                bed_original_path = os.path.abspath(params["--includebed"])
+
+                if not os.path.exists(bed_original_path):
+                    return html.Div(f"❌ BED file not found: {bed_original_path}"), None
+
+                bed_run_path = _copy_input_to_run_folder(
+                    bed_original_path,
+                    inputs_dir,
+                    "bed_input"
+                )
+
+                params["--includebed"] = os.path.abspath(bed_run_path)
+
+                logf.write(f"🔧 Using confident-region BED file: {params['--includebed']}\n")
+            else:
+                logf.write("ℹ️ No confident-region BED file provided; Truvari will run without --includebed.\n")
+
+            manifest_path = os.path.join(inputs_dir, "input_manifest.txt")
+            _remove_from_truvari_upload_cache(base_original_path)
+            _remove_from_truvari_upload_cache(comp_original_path)
+            
+            if bed_original_path:
+                _remove_from_truvari_upload_cache(bed_original_path)
+            _write_truvari_input_manifest(
+                manifest_path=manifest_path,
+                base_original=base_original_path,
+                base_run=base_vcf,
+                comp_original=comp_original_path,
+                comp_run=comp_vcf,
+                reference_fa=reference_fa,
+                bed_original=bed_original_path,
+                bed_run=bed_run_path
+            )
+
+            logf.write(f"📝 Input manifest written: {manifest_path}\n")
+        
+            # 1) BASE clean -> header fix -> reheader -> sort/index
+            logf.write("🔧 Cleaning BASE VCF before Truvari preprocessing\n")
+            
+            base_cleaned = os.path.join(run_dir, "base.cleaned.input.vcf")
+            
+            clean_vcf_for_truvari(
+                input_vcf=base_vcf,
+                output_vcf=base_cleaned,
+                logf=logf
+            )
+            
+            base_header_fixed = os.path.join(run_dir, "base.headerfixed.vcf")
+            
+            base_cleaned = _add_required_sv_vcf_headers(
+                input_vcf=base_cleaned,
+                output_vcf=base_header_fixed,
+                run_dir=run_dir,
+                logf=logf
+            )
+            
+            logf.write("🔧 Reheadering BASE VCF with reference contigs before sorting\n")
+            
+            base_prehead = os.path.join(run_dir, "base.preheader.vcf")
+            
+            _run([
+                "bcftools", "reheader",
+                "-f", fai_path,
+                base_cleaned,
+                "-o", base_prehead
+            ], logf)
+            
             logf.write("🔧 Sorting and indexing BASE VCF\n")
+            
             base_sorted = os.path.join(run_dir, "base.sorted.vcf.gz")
-            _run(["bcftools", "sort", "-Oz", "-o", base_sorted, base_vcf], logf)
+            
+            _run([
+                "bcftools", "sort",
+                "-Oz",
+                "-o", base_sorted,
+                base_prehead
+            ], logf)
+            
             _run(["tabix", "-f", "-p", "vcf", base_sorted], logf)
 
-            # 2) COMP sort/index
+            # 2) COMP clean -> header fix -> reheader -> sort/index
+            logf.write("🔧 Cleaning COMP VCF before Truvari preprocessing\n")
+            
+            comp_cleaned = os.path.join(run_dir, "comp.cleaned.input.vcf")
+            
+            clean_vcf_for_truvari(
+                input_vcf=comp_vcf,
+                output_vcf=comp_cleaned,
+                logf=logf
+            )
+            
+            comp_header_fixed = os.path.join(run_dir, "comp.headerfixed.vcf")
+            
+            comp_cleaned = _add_required_sv_vcf_headers(
+                input_vcf=comp_cleaned,
+                output_vcf=comp_header_fixed,
+                run_dir=run_dir,
+                logf=logf
+            )
+            
+            logf.write("🔧 Reheadering COMP VCF with reference contigs before sorting\n")
+            
+            comp_prehead = os.path.join(run_dir, "comp.preheader.vcf")
+            
+            _run([
+                "bcftools", "reheader",
+                "-f", fai_path,
+                comp_cleaned,
+                "-o", comp_prehead
+            ], logf)
+            
             logf.write("🔧 Sorting and indexing COMP VCF\n")
+            
             comp_sorted = os.path.join(run_dir, "comp.sorted.vcf.gz")
-            _run(["bcftools", "sort", comp_vcf, "-Oz", "-o", comp_sorted], logf)
+            
+            _run([
+                "bcftools", "sort",
+                comp_prehead,
+                "-Oz",
+                "-o", comp_sorted
+            ], logf)
+            
             _run(["tabix", "-f", "-p", "vcf", comp_sorted], logf)
 
             # 3) REF .fai + ref.bed(.gz)
-            logf.write("🔧 Creating .fai from reference\n")
-            _run(["samtools", "faidx", reference_fa], logf)
-            fai_path = reference_fa + ".fai"
-
             logf.write("🔧 Creating ref.bed from .fai\n")
             bed_path = os.path.join(run_dir, "ref.bed")
             with open(fai_path) as fi, open(bed_path, "w") as fo:
@@ -131,7 +654,12 @@ def run_truvari_pipeline(base_choice, base_vcf_uploaded, comp_vcf, reference_fa,
             # 4) COMP temizliği (INFO/END>POS)
             logf.write("🔧 Cleaning COMP: filter INFO/END>POS\n")
             comp_clean = os.path.join(run_dir, "comp.cleaned.vcf.gz")
-            _run(["bcftools", "view", "-i", "INFO/END>POS", comp_sorted, "-Oz", "-o", comp_clean], logf)
+            _run([
+                "bcftools", "view",
+                "-i", 'INFO/SVTYPE="INS" || INFO/END>POS',
+                comp_sorted,
+                "-Oz", "-o", comp_clean
+            ], logf)
             _run(["tabix", "-f", "-p", "vcf", comp_clean], logf)
 
             # 5) COMP -> onref
@@ -200,7 +728,7 @@ def run_truvari_pipeline(base_choice, base_vcf_uploaded, comp_vcf, reference_fa,
                 for flag in ["--typeignore", "--use-lev", "--gtcomp", "--passonly", "--multimatch", "--giabreport", "--debug", "--prog"]:
                     if params.get(flag, False):
                         try_cmd.append(flag)
-                for key in ["--refdist","--pctsim","--pctsize","--pctovl","--sizemin","--sizefilt","--sizemax","--no-ref","--bSample","--cSample"]:
+                for key in ["--refdist","--pctsim","--pctsize","--pctovl","--sizemin","--sizefilt","--sizemax","--includebed","--no-ref","--bSample","--cSample"]:
                     if key in params and params[key] not in [None, ""]:
                         try_cmd += [key, str(params[key])]
 
@@ -221,7 +749,7 @@ def run_truvari_pipeline(base_choice, base_vcf_uploaded, comp_vcf, reference_fa,
                     for flag in ["--typeignore","--use-lev","--gtcomp","--passonly","--multimatch","--giabreport","--debug","--prog"]:
                         if params.get(flag, False):
                             py_cmd.append(flag)
-                    for key in ["--refdist","--pctsim","--pctsize","--pctovl","--sizemin","--sizefilt","--sizemax","--no-ref","--bSample","--cSample"]:
+                    for key in ["--refdist","--pctsim","--pctsize","--pctovl","--sizemin","--sizefilt","--sizemax","--includebed","--no-ref","--bSample","--cSample"]:
                         if key in params and params[key] not in [None, ""]:
                             py_cmd += [key, str(params[key])]
                 logf.write("Fallback:\n" + " ".join(py_cmd) + "\n")
