@@ -3050,7 +3050,7 @@ def render_selected_visuals(selected, file_path, selected_svtype, json_data, svt
                 )]
         else:
             return [html.Div(
-                "❌ No uploaded file found.",
+                "",
                 style={"color": "red"}
             )]
 
