@@ -1,26 +1,32 @@
-# SV Evaluation & Visualization Web Tool (SV-EViz)
+# SV-EViz: Structural Variant Evaluation and Visualization Web Tool
 
-SV comparison/benchmarking and visualization web tool.  
-Built with Dash, integrates **SURVIVOR (merge)**, **EvalSVcallers (evaluate)**, **Truvari (bench)**, and rich interactive plots.
+SV-EViz is a web-based platform for structural variant (SV) comparison, benchmarking, metric inspection, and visualization. It provides a graphical interface for commonly used SV analysis workflows and reduces the need to run multiple command-line tools manually.
 
-Structural variant benchmarking requires multiple command-line tools, fragmented workflows, and extensive technical expertise. 
-Although tools such as SURVIVOR, Truvari, and EvalSVCallers are widely used, they operate independently and lack an integrated, user-friendly interface.
+SV-EViz integrates:
 
-SV-EViz addresses this gap by providing:
+- **SURVIVOR** for multi-caller SV consensus/merge generation
+- **Truvari** for query-versus-truth SV benchmarking
+- **EvalSVcallers** for caller-specific SV conversion and evaluation
+- Built-in visualization modules for SV summaries and genome-wide inspection
 
-- A unified web-based environment
-- Standardized input handling
-- Consistent comparison logic
-- Interactive and reproducible visualizations
+A lightweight public version is available for interface testing:
 
-## Key Features
+**Public Render-hosted web version:**  
+https://sv-eviz-web-tool.onrender.com/
 
-- Web-based interface (no command-line required)
-- Support for multiple SV comparison and consensus generation frameworks:
+> Note: The Render-hosted version is intended for lightweight testing and user-interface exploration. For large whole-genome VCF, BED, or FASTA files, local Docker or server-based deployment is recommended.
+
+---
+
+## Main Features
+
+- Web-based graphical interface for SV comparison and visualization
+- Support for three major SV workflows:
   - SURVIVOR merge
   - Truvari bench
-  - EvalSVCallers evaluate
-- Unified preprocessing and filtering pipeline
+  - EvalSVcallers conversion and evaluation
+- Module-specific input handling
+- Example datasets for quick testing
 - Interactive visualizations:
   - SVTYPE distributions
   - SV length distributions
@@ -28,91 +34,38 @@ SV-EViz addresses this gap by providing:
   - Clustergrams
   - Circos plots
   - Sankey diagrams
-- Parameter sensitivity analysis (default parameter configurations are pre-defined and automatically loaded, while allowing users to modify all parameters)
-- Reproducible benchmarking workflows
-- Modular and extensible architecture
-
-## Supported Inputs
-
-- VCF files from SV callers (e.g., Manta, Delly, GRIDSS)
-- SURVIVOR merged VCF outputs
-- Truvari bench VCF outputs
-- EvalSVCallers evaluation outputs (.eval.txt)
-- Reference truth sets VCF (e.g., GIAB)
-
-## Outputs
-
-- Benchmarking metrics (Precision, Recall, F1-score)
-- SV-level classification (TP / FP / FN)
-- Publication-ready downloadable figures and tables
-
-
-<p align="center">
-  <img src="docs/Resim1.png" width="750">
-</p>
-
-
-<p align="center">
-  <img src="docs/Resim4.png" width="750">
-</p>  
-
-## Visualization Modules
-
-- SVTYPE count distributions
-- SV length distributions by chromosome
-- Manhattan plots for genome-wide SV distribution
-- Clustergram for chromosome-SVTYPE relationships
-- Circos plots for genome-wide SV density
-- Sankey diagrams for caller–SVTYPE–chromosome relationships
-
-
-<p align="center">
-  <img src="docs/Resim2.png" width="750">
-</p>  
-
-
-
-<p align="center">
-  <img src="docs/Resim3.png" width="750">
-</p>
-
-## Installation (Docker)
-
-```bash
-docker pull maden21/sv-eviz
-docker run -p 8040:8040 maden21/sv-eviz
-```
-### Installation (Manuel):
-```markdown
-git clone https://github.com/gamzemdn/SV-EViz-web-tool.git
-cd SV-EViz-web-tool
-pip install -r requirements.txt
-python app.py
-```
-
-
-## Case Study
-SV-EViz was evaluated using Manta output of the HG00514 sample, with the UniVar SV catalog used as the reference dataset. The figures presented here belong to this case study.
+- Adjustable parameters for benchmarking modules
+- Run-specific output folders
+- Downloadable ZIP archives containing generated outputs
+- Exported tables in CSV and Excel formats
+- Exported Plotly figures as interactive HTML and, when supported, static PNG files
 
 ---
 
-## Citations for Frameworks Used in SV-EViz
-SV-EViz was evaluated using Manta output of the HG00514 sample, with the UniVar SV catalog used as the reference dataset. The figures presented here belong to this case study.
+## Deployment Options
 
-- **SURVIVOR** – A tool for merging, comparing, simulating, and evaluating structural variants.  
-  Jeffares, D.C., Jolly, C., Hoti, M., Speed, D., Shaw, L., Rallis, C., Balloux, F., Dessimoz, C., Bähler, J., & Sedlazeck, F.J. (2017).  
-  *Transient structural variations have strong effects on quantitative traits and reproductive isolation in fission yeast*.  
-  **Nature Communications**, 8, 14061, 1–11. [https://doi.org/10.1038/ncomms14061](https://doi.org/10.1038/ncomms14061)  
-  GitHub: [fritzsedlazeck/SURVIVOR](https://github.com/fritzsedlazeck/SURVIVOR)
+| Deployment option | Description | Recommended use |
+|---|---|---|
+| Public Render-hosted version | Browser-accessible version without local installation | Lightweight testing and interface exploration |
+| Docker local deployment | Runs SV-EViz locally using Docker | Recommended for most users and reproducible testing |
+| Server-based deployment | Runs SV-EViz on an institutional or cloud server | Recommended for larger datasets and shared use |
 
-- **EvalSVcallers** – A benchmarking framework for evaluating structural variant calling algorithms.  
-  Kosugi, S., Momozawa, Y., Liu, X., Terao, C., Kubo, M., & Kamatani, Y. (2019).  
-  *Comprehensive evaluation of structural variation detection algorithms for whole genome sequencing*.  
-  **Genome Biology**, 20(1), 117. [https://doi.org/10.1186/s13059-019-1720-5](https://doi.org/10.1186/s13059-019-1720-5)  
-  GitHub: [stat-lab/EvalSVcallers](https://github.com/stat-lab/EvalSVcallers)
+---
 
-- **Truvari** – A refined comparison tool that evaluates structural variant calls while preserving allelic diversity.  
-  English, A.C., Menon, V.K., Gibbs, R.A., et al. (2022).  
-  *Truvari: refined structural variant comparison preserves allelic diversity*.  
-  **Genome Biology**, 23, 271. [https://doi.org/10.1186/s13059-022-02840-6](https://doi.org/10.1186/s13059-022-02840-6)  
-  GitHub: [ACEnglish/truvari](https://github.com/ACEnglish/truvari)
+## Technical Requirements
+
+For local or server-based use, the following are recommended:
+
+| Requirement | Recommended configuration |
+|---|---|
+| Operating system | Linux or Docker-supported environment |
+| Python | Python 3.11 inside Docker |
+| Memory | At least 8 GB RAM for small to medium examples; more for large WGS files |
+| Disk space | Depends on uploaded VCF, BED, FASTA, and generated output files |
+| Browser | Modern browser such as Chrome, Firefox, or Edge |
+| Reference FASTA | Required for Truvari benchmarking |
+
+Large reference FASTA files are not included in the repository because of their size. For Truvari analyses, users should place reference FASTA files in:
+
+```bash
+uploaded_files/reference_files/
