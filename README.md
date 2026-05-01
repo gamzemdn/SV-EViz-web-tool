@@ -148,7 +148,7 @@ These files allow users to test:
 - Truvari benchmarking using query/truth VCF files and optional BED input
 - EvalSVcallers conversion and evaluation
 - Visualization of caller-like VCF, SURVIVOR output, Truvari-compatible VCF, and EvalSVcallers-style output
-- Metric inspection using Truvari `summary.json` and EvalSVcallers `.eval.txt` outputs
+- Metric inspection using Truvari `summary.json` , `summary.txt` and EvalSVcallers `.eval.txt` outputs
 
 Depending on the module, users can either upload their own files or use the provided example datasets to test the workflow.
 
