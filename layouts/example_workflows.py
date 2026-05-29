@@ -403,7 +403,7 @@ def register_example_workflows(app, deps):
             source_type = "survivor"
 
         elif selected_source == "evalsvcallers":
-            src = ex_root / "visualization" / "evalsvcallers" / "NA12878_svaba.vcf.gz"
+            src = ex_root / "visualization" / "evalsvcallers" / "NA12878_manta.TF.vcf"
             source_type = "evalsvcallers"
 
         else:
