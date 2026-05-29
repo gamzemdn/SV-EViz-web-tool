@@ -263,7 +263,7 @@ def get_evalsvcallers_upload_section():
             multiple=False
         ),
         html.Div(id='upload-eval-txt-status', style={'marginLeft': '10px', 'fontFamily': '"Times New Roman", Times, serif'}),
-        dbc.Button('Process EvalSVCallers File', id='process-eval-button', n_clicks=0, color="primary", className="mt-2", style={'marginTop': '10px', 'fontFamily': '"Times New Roman", Times, serif'})
+        dbc.Button('Process EvalSVcallers File', id='process-eval-button', n_clicks=0, color="primary", className="mt-2", style={'marginTop': '10px', 'fontFamily': '"Times New Roman", Times, serif'})
     ])
 
 READ_COUNTS = ["2", "3", "4", "5", "6", "7", "8", "9", "10", "12"]

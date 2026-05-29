@@ -404,6 +404,32 @@ def update_layout(active_tab):
                     }
                 ),
 
+                dbc.Alert(
+                    [
+                        html.Div(
+                            "Reference genome note for Truvari",
+                            style={'fontWeight': 'bold', 'marginBottom': '5px'}
+                        ),
+                        html.Div(
+                            "Truvari requires a reference FASTA file that matches the genome build of the input VCF files. "
+                            "Because reference genomes are large, they are not bundled with the application, Docker image, "
+                            "or example datasets. To use the 'Select from reference folder' option, users must place the "
+                            "reference FASTA file and its .fai index inside uploaded_files/reference_files/. "
+                            "Only FASTA files available in this folder are displayed in the Truvari reference genome dropdown. "
+                            "Alternatively, users can use the upload mode to provide a custom reference FASTA file; however, "
+                            "users should note that uploading a large reference genome through the browser may take considerably longer. "
+                            "Links for downloading GRCh37 and GRCh38 reference genomes are provided on the GitHub repository page."
+                        )
+                    ],
+                    color="warning",
+                    style={
+                        'fontFamily': '"Times New Roman", Times, serif',
+                        'fontSize': '14px',
+                        'marginTop': '15px',
+                        'border': '1px solid #f1c40f'
+                    }
+                ),
+
                 html.Hr(),
 
                 html.H3(
@@ -589,7 +615,7 @@ def update_layout(active_tab):
             # Output area
             dcc.Loading(
                 id="loading-survivor-output",
-                type="default",  # or "circle", "dot", "graph"
+                type="circle",  # or "circle", "dot", "graph"
                 fullscreen=False,
                 children=html.Div([
                     html.Div(id='survivor-output', style={'marginTop': '20px'}), #convert-status
@@ -601,19 +627,43 @@ def update_layout(active_tab):
                 ])
                 
             ),
-            # Separate visualization containers
-            html.Div(id='survivor-visuals-container', children=[
-                html.Div(id='comparison-extra-output')
-            ], style={'display': 'block'}),
 
-
-            html.Div(id='evalsvcallers-visuals-container', children=[
-                
-            ], style={'display': 'none'}),
-            html.Div(id='truvari-visuals-container', children=[
-                html.Div(id='truvari-output-list'),  # veya başka görsel alan
-            ], style={'display': 'none'})
-
+            dcc.Loading(
+                id="loading-survivor-example-output",
+                type="circle",
+                fullscreen=False,
+                children=html.Div(
+                    id='survivor-visuals-container',
+                    children=[
+                        html.Div(id='comparison-extra-output')
+                    ],
+                    style={'display': 'block'}
+                )
+            ),
+            
+            dcc.Loading(
+                id="loading-evalsvcallers-example-output",
+                type="circle",
+                fullscreen=False,
+                children=html.Div(
+                    id='evalsvcallers-visuals-container',
+                    children=[],
+                    style={'display': 'none'}
+                )
+            ),
+            
+            dcc.Loading(
+                id="loading-truvari-example-output",
+                type="circle",
+                fullscreen=False,
+                children=html.Div(
+                    id='truvari-visuals-container',
+                    children=[
+                        html.Div(id='truvari-output-list')
+                    ],
+                    style={'display': 'none'}
+                )
+            )
         ])
         return left_column, right_column
 
@@ -1323,6 +1373,7 @@ def update_eval_comparison_visuals(selected_svtype, selected_chroms, circos_grap
      
     # Ensure SVTYPE is correctly extracted from INFO
     df['SVTYPE'] = df['INFO'].str.extract(r'SVTYPE=([^;]+)')
+ 
     # Filter by SVTYPE
     df_filtered = df.copy()
     if selected_svtype and selected_svtype != "ALL":
@@ -3692,11 +3743,22 @@ register_example_workflows(
         "generate_truvari_visuals": generate_truvari_visuals,
         "parse_evalsvcallers_file": parse_evalsvcallers_file,
         "generate_evalsvcallers_visuals": generate_evalsvcallers_visuals,
+        
+        # EvalSVcallers example workflow
+        "run_eval_conversion": run_conversion,
+        "run_eval_evaluation": run_evaluation,
 
+        # Truvari example workflow
+        "plot_manhattan_truvari": plot_manhattan_truvari,
+        "vcf_to_circos_json_truvari": vcf_to_circos_json_truvari,
+
+        # Shared controls
+        "get_manhattan_controls": get_manhattan_controls,
+        
         "create_run_export_package": create_run_export_package,
         "make_zip_download_card": make_zip_download_card,
     }
 )
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", debug=False, port=8040)
+    app.run(host="0.0.0.0", debug=True, port=8040)
     #app.run_server(debug=True, port=8040)

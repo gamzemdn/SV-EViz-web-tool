@@ -1,1 +1,0 @@
-Command: /home/gamze/EvalSVcallers-master/scripts/convert_SV_callers_vcf.pl -t Manta '/home/gamze/Downloads/sv-eviz-web-tool/uploaded_files/evalsvcallers_output/diploidSV.vcf' > '/home/gamze/Downloads/sv-eviz-web-tool/uploaded_files/evalsvcallers_output/converted_Manta_20250807_164247.vcf'

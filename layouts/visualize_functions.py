@@ -5,6 +5,27 @@ import json
 import io
 from collections import defaultdict
 import pandas as pd
+
+# ─────────────────────────────────────────────────────────────────────────────
+# FIX: Disable Plotly 6.x binary array encoding (incompatible with Dash 2.12's
+# bundled plotly.js). Without this patch, px.bar / px.histogram / px.violin /
+# go.Scatter / go.Sankey emit y-values as base64-encoded binary blobs
+# ({"dtype":"i1","bdata":"GA=="}) that the older client-side plotly.js cannot
+# decode, causing bars/histograms to render with height = 0 (empty).
+# This monkey-patch forces all numpy arrays to be serialized as plain Python
+# lists, which the client renders correctly. Must run BEFORE plotly is imported.
+# ─────────────────────────────────────────────────────────────────────────────
+import _plotly_utils.utils as _plotly_utils_mod
+import numpy as _np_for_patch
+
+def _no_binary_encoding(v):
+    if isinstance(v, _np_for_patch.ndarray):
+        return v.tolist()
+    return v
+
+_plotly_utils_mod.to_typed_array_spec = _no_binary_encoding
+# ─────────────────────────────────────────────────────────────────────────────
+
 import plotly.express as px
 import plotly.graph_objects as go
 import dash_bio as dashbio
@@ -198,14 +219,43 @@ def plot_vcf_data(df):
         chrom_col = "#CHROM"
         
     if chrom_col:
-        chrom_counts = df[chrom_col].value_counts().reset_index()
+        chrom_order = [f"chr{i}" for i in range(1, 23)] + ["chrX", "chrY"]
+        valid_chroms = [str(i) for i in range(1, 23)] + ["X", "Y"]
+    
+        chrom_df = df.copy()
+    
+        chrom_df["Chromosome"] = (
+            chrom_df[chrom_col]
+            .astype(str)
+            .str.strip()
+            .str.replace("^chr", "", regex=True)
+        )
+    
+        chrom_df = chrom_df[chrom_df["Chromosome"].isin(valid_chroms)].copy()
+        chrom_df["Chromosome"] = "chr" + chrom_df["Chromosome"]
+    
+        chrom_counts = (
+            chrom_df["Chromosome"]
+            .value_counts()
+            .reindex(chrom_order, fill_value=0)
+            .reset_index()
+        )
+    
         chrom_counts.columns = ["Chromosome", "Variant Count"]
+    
         fig_chr = px.bar(
             chrom_counts,
             x="Chromosome",
             y="Variant Count",
-            title="Chromosome-Wise Variant Distribution"
+            title="Chromosome-Wise Variant Distribution",
+            category_orders={"Chromosome": chrom_order}
         )
+    
+        fig_chr.update_xaxes(
+            categoryorder="array",
+            categoryarray=chrom_order
+        )
+    
         figures.append(dcc.Graph(
             id="chromosome-wise-variant-distribution-figure",
             figure=fig_chr
@@ -646,7 +696,7 @@ def plot_manhattan(df, selected_svtypes, threshold):
         for svtype in chr_df["SVTYPE"].unique():
             sv_df = chr_df[chr_df["SVTYPE"] == svtype].copy()
 
-            fig.add_trace(go.Scattergl(
+            fig.add_trace(go.Scatter(
                 x=sv_df["cumulative_bp"],
                 y=sv_df["neglog10P"],
                 mode="markers",
@@ -676,7 +726,7 @@ def plot_manhattan(df, selected_svtypes, threshold):
     if highlight_df_list:
         all_high = pd.concat(highlight_df_list)
 
-        fig.add_trace(go.Scattergl(
+        fig.add_trace(go.Scatter(
             x=all_high["cumulative_bp"],
             y=all_high["neglog10P"],
             mode="markers",
@@ -802,7 +852,7 @@ def plot_manhattan_svlen(df, selected_svtypes, log10_threshold):
 
         for svtype in chr_df["SVTYPE"].unique():
             sv_df = chr_df[chr_df["SVTYPE"] == svtype]
-            fig.add_trace(go.Scattergl(
+            fig.add_trace(go.Scatter(
                 x=sv_df["cumulative_bp"],
                 y=sv_df["SVLEN"],
                 mode='markers',
@@ -826,7 +876,7 @@ def plot_manhattan_svlen(df, selected_svtypes, log10_threshold):
 
     if highlight_df_list:
         all_high = pd.concat(highlight_df_list)
-        fig.add_trace(go.Scattergl(
+        fig.add_trace(go.Scatter(
             x=all_high["cumulative_bp"],
             y=all_high["SVLEN"],
             mode='markers',

@@ -1205,7 +1205,7 @@ def plot_manhattan_truvari(pairs, selected_svtypes=None, threshold=6):
                     continue
                 col = combo_color.get(f"{grp}:{sv}", "#999999")
 
-                fig.add_trace(go.Scattergl(
+                fig.add_trace(go.Scatter(
                     x=sv_df["cumulative_bp"],
                     y=sv_df["neglog10P"],
                     mode="markers",
@@ -1230,7 +1230,7 @@ def plot_manhattan_truvari(pairs, selected_svtypes=None, threshold=6):
     # Highlight points above threshold
     high_df = df[df["neglog10P"] > float(threshold)]
     if not high_df.empty:
-        fig.add_trace(go.Scattergl(
+        fig.add_trace(go.Scatter(
             x=high_df["cumulative_bp"],
             y=high_df["neglog10P"],
             mode="markers",

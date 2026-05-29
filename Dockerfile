@@ -37,7 +37,8 @@ COPY requirements.txt .
 # Install Python packages
 RUN pip install --upgrade "pip<25" wheel \
     && pip install "setuptools==57.5.0" \
-    && pip install --no-build-isolation --no-cache-dir -r requirements.txt
+    && pip install --no-build-isolation --no-cache-dir --timeout 300 --retries 10 -r requirements.txt
+
 # Copy all app files into container
 COPY . .
 

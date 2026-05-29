@@ -2167,8 +2167,8 @@ if ($out_TF > 0){
             next;
         }
         my ($chr, $pos) = split (/\t/, $line);
-        $chr =~ s/^chr// if ($chr =~ /^chr/);
-	    my $type = $1 if ($line =~ /SVTYPE=(.+?);/);
+    #    $chr =~ s/^chr// if ($chr =~ /^chr/);
+	my $type = $1 if ($line =~ /SVTYPE=(.+?);/);
         $type = 'INS' if ($type =~ /MEI|VEI|NUMT/);
 
         if (exists ${${$TP{$chr}}{$pos}}{$type}){
