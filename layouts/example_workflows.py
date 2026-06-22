@@ -487,6 +487,7 @@ def register_example_workflows(app, deps):
             )
 
             return (
+                html.Div("", style={"color": "green"}),
                 html.Div([metrics_components]),
                 html.Div()
             )
@@ -517,6 +518,7 @@ def register_example_workflows(app, deps):
             )
 
             return (
+                html.Div("", style={"color": "green"}),
                 html.Div(),
                 html.Div([metrics_components])
             )
