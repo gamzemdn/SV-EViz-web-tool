@@ -3523,6 +3523,9 @@ def show_survivor_upload_status(caller_contents, ref_contents, inter_contents,
     prevent_initial_call=True
 )
 def process_truvari_file(n_clicks, contents, filename):
+    if not n_clicks:
+        raise dash.exceptions.PreventUpdate
+
     if not contents:
         return html.Div(
             "⚠️ Please upload a valid summary file (.json or .txt).",
@@ -3596,8 +3599,11 @@ def show_tru_file_upload_status(contents, filename):
     prevent_initial_call=True
 )
 def process_evalsvcallers_file(n_clicks, contents, filename):
+    if not n_clicks:
+        raise dash.exceptions.PreventUpdate
+
     if not contents or not filename.endswith(".eval.txt"):
-        return html.Div("⚠️ Please upload a valid .eval.txt file.",style={'fontFamily': '\"Times New Roman\", Times, serif'})
+        return html.Div("⚠️ Please upload a valid .eval.txt file.",style={'fontFamily': '"Times New Roman", Times, serif'})
 
     try:
         pivot_ref, df_long, df_block = parse_evalsvcallers_file(contents)
