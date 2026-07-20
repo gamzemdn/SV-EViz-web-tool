@@ -706,6 +706,13 @@ def toggle_param_layout(selected_tool):
     Output('merged-path-store', 'data', allow_duplicate=True),
     Output('truvari-output-list', 'children', allow_duplicate=True),
     Output('tru-status', 'children', allow_duplicate=True),
+ #   Output('survivor-output', 'children', allow_duplicate=True),
+    Output('comparison-extra-output', 'children', allow_duplicate=True),
+  #  Output('eval-output-list', 'children', allow_duplicate=True),
+  #  Output('eval-output-ref', 'children', allow_duplicate=True),
+    Output('evalsvcallers-visuals-container', 'children', allow_duplicate=True),
+    Output('truvari-metrics-preview', 'children', allow_duplicate=True),
+    Output('truvari-visual-output', 'children', allow_duplicate=True),
  #   Output('eval-preview-card', 'children', allow_duplicate=True),
  #   Output('eval-visuals-output', 'children', allow_duplicate=True),
  #   Output('eval-clustergram-output', 'children', allow_duplicate=True),
@@ -721,10 +728,24 @@ def toggle_param_layout(selected_tool):
 )
 def reset_all_outputs(selected_tool):
     return (
-        {}, {}, {},
-        [], None,
+        {},          # converted-file-store
+        {},          # tp-fp-file-store
+        {},          # metrics-file-store
+        [],          # survivor-uploaded-paths
+        None,        # merged-path-store
+
         html.Div(),  # truvari-output-list
-        html.Div()   # tru-status
+        html.Div(),  # tru-status
+
+    #    html.Div(),  # survivor-output
+        html.Div(),  # comparison-extra-output
+
+     #   html.Div(),  # eval-output-list
+     #   html.Div(),  # eval-output-ref
+        [],          # evalsvcallers-visuals-container
+
+        html.Div(),  # truvari-metrics-preview
+        html.Div()   # truvari-visual-output
     )       
 ################### SURVIVOR FUNCTIONS ########################
 @app.callback(
@@ -742,9 +763,7 @@ def toggle_ref_upload(ref_source):
     prevent_initial_call=True
 )
 def clear_survivor_status_on_switch(tool):
-    if tool == 'evalsvcallers':
-        return ""  # clears previous eval messages
-    return dash.no_update    
+    return html.Div()  
 
 @app.callback(
     Output('preview-card', 'children'),
@@ -1268,14 +1287,17 @@ def clear_eval_status_on_switch(tool):
     return html.Div()
 
 @app.callback(
-    Output('eval-output-ref', 'children', allow_duplicate=True),
+    Output(
+        'eval-output-ref',
+        'children',
+        allow_duplicate=True
+    ),
     Input('comparison-type', 'value'),
     prevent_initial_call=True
 )
 def clear_eval_reference_message_on_tool_switch(selected_tool):
-    if selected_tool != 'evalsvcallers':
-        return html.Div()
-    return dash.no_update
+    return html.Div()
+    
 @app.callback(
     Output('eval-output-list', 'children', allow_duplicate=True),
     Input('upload-converted-data', 'filename'),
@@ -3768,3 +3790,4 @@ register_example_workflows(
 if __name__ == "__main__":
     app.run(host="0.0.0.0", debug=False, port=8040)
     #app.run_server(debug=True, port=8040)
+
