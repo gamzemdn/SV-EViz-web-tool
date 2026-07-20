@@ -156,7 +156,7 @@ uploaded_files/reference_files/GRCh38.fa
 uploaded_files/reference_files/GRCh38.fa.fai
 ```
 
-## Docker Compose
+### Docker Compose
 
 When using Docker Compose, placing the reference files in the directory above is sufficient because the included docker-compose.yml automatically mounts the local uploaded_files directory into the container.
 
@@ -167,7 +167,7 @@ Run the following command from the root directory of the cloned repository:
 sudo docker compose up
 ```
 
-## Direct Docker run
+### Direct Docker run
 
 When starting the published Docker image directly with docker run, placing the reference files in the host directory is not sufficient by itself. The directory must also be mounted into the container.
 
