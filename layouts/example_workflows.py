@@ -426,7 +426,20 @@ def register_example_workflows(app, deps):
         ])
 
         return (
-            html.Div("✅ Visualization example loaded. Basic visuals will be displayed.", style={"color": "green"}),
+            html.Div(
+                [
+                    html.Div(
+                        "✅ Visualization example loaded successfully.",
+                        style={"fontWeight": "bold"}
+                    ),
+                    html.Div(
+                        "Data Table & Basic Visuals are displayed by default. "
+                        "Use the visualization selection menu to open Sankey, "
+                        "Circos, Clustergram, or Manhattan plots."
+                    )
+                ],
+                style={"color": "green"}
+            ),
             file_list,
             copied_path,
             str(run_dir),
@@ -1558,3 +1571,4 @@ def register_example_workflows(app, deps):
                 status_html if status_html else html.Div()
             ], style={"color": "red"})
             return err_block, tp_fp_path, metrics_path, html.Div()
+
