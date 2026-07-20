@@ -15,3 +15,4 @@ uploaded_files/
 *.tar.gz
 
 .DS_Store
+!example_data/**/*.gz
