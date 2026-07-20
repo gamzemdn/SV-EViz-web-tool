@@ -142,17 +142,37 @@ require the reference and will work without it.
 
 ### Note on Docker deployment
 
-The included `docker-compose.yml` mounts `./uploaded_files` from the host
-into the container. This means:
+The reference FASTA files are not stored inside the Docker image.
 
-- You download the reference **once** on the host machine.
-- The reference is shared across container rebuilds (no re-download needed).
-- The Docker image itself stays small and quick to distribute.
+For Docker Compose, the included `docker-compose.yml` mounts
+`./uploaded_files` from the host into the container. Place the reference files in:
 
-If you deploy the application without Docker (running natively), the same
-directory path is used relative to the application root.
+```text
+uploaded_files/reference_files/
 
 ---
+Then start the application with:
+
+```bash
+sudo docker compose up
+```
+
+The included `docker-compose.yml` mounts the local `uploaded_files` directory
+into the container.
+
+When starting the published Docker image directly, mount the local reference
+directory into the container:
+
+```bash
+sudo docker run -d \
+  --name sv-eviz \
+  -p 8040:8040 \
+  -v "$(pwd)/uploaded_files/reference_files:/app/uploaded_files/reference_files:ro" \
+  maden21/sv-eviz:latest
+```
+
+Without this volume mount, the reference directory inside the container will
+be empty and no reference genome will appear in the Truvari dropdown.
 
 ## Installation with Docker Compose
 
@@ -414,7 +434,7 @@ sudo docker compose up
 
 ### Reference FASTA not listed in Truvari
 
-Make sure the FASTA file is placed inside:
+Make sure the FASTA file and its `.fai` index are placed directly inside:
 
 ```bash
 uploaded_files/reference_files/
